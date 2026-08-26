@@ -1,0 +1,1 @@
+Cliente=compra. Negocio=vende. Delivery=entrega. SaaS Admin=opera plataforma.

@@ -1,0 +1,1 @@
+Modelo de datos multi-tenant con tenants, restaurants, orders, delivery, loyalty, referrals.

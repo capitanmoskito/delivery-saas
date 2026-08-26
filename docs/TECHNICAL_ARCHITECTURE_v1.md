@@ -1,0 +1,1 @@
+Arquitectura: Next.js 15, TypeScript, Docker, PostgreSQL, Prisma, Auth.js, Multi-Tenant.

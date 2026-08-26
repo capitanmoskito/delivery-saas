@@ -1,0 +1,1 @@
+Roadmap por fases: Foundation, MVP, Growth y Hardening.

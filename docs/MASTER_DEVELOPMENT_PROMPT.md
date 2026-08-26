@@ -1,0 +1,1 @@
+Prompt maestro para Copilot con reglas de desarrollo, stack y dominios.

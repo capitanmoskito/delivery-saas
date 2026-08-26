@@ -4,10 +4,82 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../app/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantStatus {
+  trial
+  pending_payment
+  active
+  suspended
+  cancelled
+}
+
+enum UserRole {
+  super_admin
+  restaurant_admin
+}
+
+model Tenant {
+
+  id            String   @id @default(uuid())
+
+  businessName  String
+
+  prefix        String   @unique
+
+  referralCode  String   @unique
+
+  status        TenantStatus
+
+  trialEndsAt   DateTime?
+
+  createdAt     DateTime @default(now())
+
+  updatedAt     DateTime @updatedAt
+
+  users         User[]
+
+  restaurants   Restaurant[]
+}
+
+model User {
+
+  id            String   @id @default(uuid())
+
+  email         String   @unique
+
+  passwordHash  String
+
+  role          UserRole
+
+  tenantId      String?
+
+  tenant        Tenant? @relation(fields:[tenantId], references:[id])
+
+  createdAt     DateTime @default(now())
+
+  updatedAt     DateTime @updatedAt
+}
+
+model Restaurant {
+
+  id            String   @id @default(uuid())
+
+  tenantId      String
+
+  tenant        Tenant @relation(fields:[tenantId], references:[id])
+
+  name          String
+
+  active        Boolean @default(true)
+
+  createdAt     DateTime @default(now())
+
+  updatedAt     DateTime @updatedAt
 }

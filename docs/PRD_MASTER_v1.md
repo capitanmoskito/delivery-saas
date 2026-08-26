@@ -1,0 +1,1 @@
+PRD Maestro v1.0 consolidado para plataforma SaaS de pedidos, delivery, pickup, consumo local, fidelización, referidos y multi-tenant.

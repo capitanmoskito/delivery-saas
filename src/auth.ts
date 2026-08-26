@@ -9,7 +9,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: {},
       },
 
-      async authorize(credentials) {
+      async authorize() {
         return null;
       },
     }),

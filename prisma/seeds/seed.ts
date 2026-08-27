@@ -83,6 +83,38 @@ async function main() {
     console.log("Premium plan created");
   }
 
+  const existingPromo =
+  await prisma.saaSPromotion.findFirst({
+    where: {
+      code: "HOTSALE"
+    }
+  });
+
+if (!existingPromo) {
+
+  await prisma.saaSPromotion.create({
+
+    data: {
+
+      name: "Hot Sale",
+
+      code: "HOTSALE",
+
+      type: "percentage",
+
+      value: 15,
+
+      active: true,
+
+      startsAt: new Date(),
+
+      endsAt: new Date(
+        Date.now() + 30 * 24 * 60 * 60 * 1000
+      )
+    }
+  });
+}
+
   const adminEmail =
     process.env.SUPER_ADMIN_EMAIL!;
 

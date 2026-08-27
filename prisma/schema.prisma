@@ -129,6 +129,38 @@ model SubscriptionPlan {
   @@map("subscription_plans")
 }
 
+enum PromotionType {
+  percentage
+  fixed_amount
+  free_month
+  free_setup
+}
+
+model SaaSPromotion {
+
+  id String @id @default(uuid())
+
+  name String
+
+  code String @unique
+
+  type PromotionType
+
+  value Float
+
+  active Boolean @default(true)
+
+  startsAt DateTime
+
+  endsAt DateTime
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("saas_promotions")
+}
+
 model ReferralCode {
   id String @id @default(uuid())
 

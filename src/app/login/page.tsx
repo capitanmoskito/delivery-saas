@@ -1,28 +1,94 @@
-export default function LoginPage() {
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-sm rounded-lg border p-6">
-        <h1 className="mb-4 text-xl font-semibold">Login SaaS</h1>
+"use client";
 
-        <form>
-          <input
-            type="email"
-            placeholder="Correo"
-            className="mb-3 w-full border p-2"
-          />
-          <input
-            type="password"
-            placeholder="Contraseña"
-            className="mb-3 w-full border p-2"
-          />
-          <button
-            type="submit"
-            className="w-full rounded bg-blue-500 p-2 text-white"
-          >
-            Iniciar sesión
-          </button>
-        </form>
+import { useState } from "react";
+
+export default function LoginPage() {
+
+  const [email, setEmail] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
+
+  async function handleLogin() {
+
+    const response =
+      await fetch(
+        "/api/auth/login",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body: JSON.stringify({
+
+            email,
+
+            password
+          })
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (data.success) {
+
+      window.location.href =
+        "/saas/dashboard";
+
+      return;
+    }
+
+    alert(data.message);
+  }
+
+  return (
+
+    <div className="flex min-h-screen items-center justify-center">
+
+      <div className="w-full max-w-sm rounded-lg border p-6">
+
+        <h1 className="mb-4 text-xl font-semibold">
+
+          Login SaaS
+        </h1>
+
+        <input
+          value={email}
+          onChange={(e)=>
+            setEmail(
+              e.target.value
+            )
+          }
+          placeholder="Correo"
+          className="mb-3 w-full border p-2"
+        />
+
+        <input
+          type="password"
+          value={password}
+          onChange={(e)=>
+            setPassword(
+              e.target.value
+            )
+          }
+          placeholder="Contraseña"
+          className="mb-3 w-full border p-2"
+        />
+
+        <button
+          onClick={handleLogin}
+          className="w-full rounded bg-black p-2 text-white"
+        >
+          Entrar
+        </button>
+
       </div>
+
     </div>
   );
 }

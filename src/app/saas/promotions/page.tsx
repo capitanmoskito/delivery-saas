@@ -2,6 +2,8 @@ import {
   PromotionService
 } from "@/src/modules/saas/promotions/promotion.service";
 
+export const dynamic = "force-dynamic";
+
 export default async function PromotionsPage() {
 
   const service =

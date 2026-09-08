@@ -31,12 +31,30 @@ export class SaaSRepository {
     const totalPlans =
       await prisma.subscriptionPlan.count();
 
+    const totalPromotions =
+      await prisma.saaSPromotion.count();
+
+    const testimonialModel = (
+      prisma as typeof prisma & {
+        businessTestimonial?: {
+          count: (args?: unknown) => Promise<number>;
+        };
+      }
+    ).businessTestimonial;
+
+    const totalTestimonials =
+      testimonialModel
+        ? await testimonialModel.count()
+        : 0;
+
     return {
       totalBusinesses,
       trialBusinesses,
       activeBusinesses,
       suspendedBusinesses,
-      totalPlans
+      totalPlans,
+      totalPromotions,
+      totalTestimonials,
     };
   }
 }

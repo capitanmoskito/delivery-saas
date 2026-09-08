@@ -33,6 +33,37 @@ async function main() {
     console.log("SaaS Settings created");
   }
 
+  const testimonial =
+    await prisma.businessTestimonial.findFirst();
+
+  if (!testimonial) {
+
+  await prisma.businessTestimonial.create({
+
+    data: {
+
+      businessName:
+        "Quesadillas Lupita",
+
+      city:
+        "Ciudad de México",
+
+      rating: 5,
+
+      testimonial:
+        "Muy buena app, ayudó a mi negocio a organizar pedidos y aumentar ventas.",
+
+      approved: true,
+
+      active: true
+    }
+  });
+
+  console.log(
+    "Business testimonial created"
+  );
+}
+
   const basicPlan =
     await prisma.subscriptionPlan.findFirst({
       where: { name: "BASICO" }

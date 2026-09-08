@@ -18,9 +18,13 @@ export default function SaaSLayout({
 
           <nav className="flex gap-4">
             <Link href="/saas/dashboard">Dashboard</Link>
-            <Link href="/saas/settings">Configuración</Link>
+            <Link href="/saas/businesses">Negocios</Link>
             <Link href="/saas/plans">Planes</Link>
             <Link href="/saas/promotions">Promociones</Link>
+            <Link href="/saas/referrals">Referidos</Link>
+            <Link href="/saas/testimonials">Testimonios</Link>
+            <Link href="/saas/banners">Banners</Link>
+            <Link href="/saas/settings">Configuración</Link>
 
           </nav>
 

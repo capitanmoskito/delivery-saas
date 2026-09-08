@@ -9,4 +9,8 @@ export interface DashboardMetrics {
   suspendedBusinesses: number;
 
   totalPlans: number;
+
+  totalPromotions: number;
+ 
+totalTestimonials: number;
 }

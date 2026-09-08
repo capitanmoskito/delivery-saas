@@ -7,6 +7,8 @@ import { redirect }
 import { SaaSService }
   from "@/src/modules/saas/saas.service";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
 
   const cookieStore =
@@ -72,6 +74,20 @@ export default async function DashboardPage() {
           <p>Planes</p>
           <h2 className="text-3xl font-bold">
             {metrics.totalPlans}
+          </h2>
+        </div>
+
+        <div className="rounded border p-4">
+          <p>Promociones</p>
+          <h2 className="text-3xl font-bold">
+            {metrics.totalPromotions}
+          </h2>
+        </div>
+
+        <div className="rounded border p-4">
+          <p>Testimonios</p>
+          <h2 className="text-3xl font-bold">
+            {metrics.totalTestimonials}
           </h2>
         </div>
 

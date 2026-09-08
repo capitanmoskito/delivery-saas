@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export default function LoginPage() {
+  const router = useRouter();
 
   const [email, setEmail] =
     useState("");
@@ -36,10 +38,7 @@ export default function LoginPage() {
       await response.json();
 
     if (data.success) {
-
-      window.location.href =
-        "/saas/dashboard";
-
+      router.push("/saas/dashboard");
       return;
     }
 

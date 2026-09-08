@@ -1,6 +1,8 @@
 import { PlanService }
   from "@/src/modules/saas/plan.service";
 
+export const dynamic = "force-dynamic";
+
 export default async function PlansPage() {
 
   const planService =

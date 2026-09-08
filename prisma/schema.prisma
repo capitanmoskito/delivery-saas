@@ -44,6 +44,8 @@ model Tenant {
 
   referralCodes ReferralCode[]
 
+  testimonials BusinessTestimonial[]
+
   @@map("tenants")
 }
 
@@ -81,6 +83,8 @@ model Restaurant {
   name String
 
   active Boolean @default(true)
+
+  categories RestaurantCategory[]
 
   createdAt DateTime @default(now())
 
@@ -161,6 +165,35 @@ model SaaSPromotion {
   @@map("saas_promotions")
 }
 
+model BusinessTestimonial {
+
+  id String @id @default(uuid())
+
+  tenantId String?
+
+  businessName String
+
+  city String
+
+  rating Float
+
+  testimonial String
+
+  logoUrl String?
+
+  approved Boolean @default(false)
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@map("business_testimonials")
+}
+
 model ReferralCode {
   id String @id @default(uuid())
 
@@ -230,4 +263,61 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model MarketingBanner {
+
+  id String @id @default(uuid())
+
+  title String
+
+  imageUrl String
+
+  linkUrl String?
+
+  active Boolean @default(true)
+
+  priority Int @default(1)
+
+  startsAt DateTime?
+
+  endsAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("marketing_banners")
+}
+
+model BusinessCategory {
+
+  id String @id @default(uuid())
+
+  name String @unique
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  restaurants RestaurantCategory[]
+
+  @@map("business_categories")
+}
+
+model RestaurantCategory {
+
+  id String @id @default(uuid())
+
+  restaurantId String
+
+  categoryId String
+
+  category BusinessCategory @relation(fields: [categoryId], references: [id])
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id])
+
+  @@map("restaurant_categories")
 }

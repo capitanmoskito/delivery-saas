@@ -91,6 +91,14 @@ export default async function DashboardPage() {
           </h2>
         </div>
 
+        <div className="rounded border p-4">
+          <p>Trials Activos</p>
+          <h2 className="text-3xl font-bold">
+            {metrics.trialBusinesses}
+          </h2>
+        </div>
+
+
       </div>
 
     </div>

@@ -6,10 +6,23 @@ export class AuthRepository {
     email: string
   ) {
 
-    return prisma.user.findUnique({
-      where: {
-        email
-      }
-    });
+    console.log(
+      "Buscando usuario:",
+      email
+    );
+
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          email
+        }
+      });
+
+    console.log(
+      "Usuario encontrado:",
+      user
+    );
+
+    return user;
   }
 }

@@ -1,11 +1,7 @@
 import bcrypt from "bcrypt";
+import { NextResponse } from "next/server";
 
-import { prisma }
-  from "@/lib/prisma";
-
-import {
-  NextResponse
-} from "next/server";
+import { prisma } from "@/src//lib/prisma";
 
 function generatePrefix(
   businessName: string
@@ -26,4 +22,153 @@ function generateReferralCode(
 
 export async function POST(
   request: Request
-)
+) {
+
+  try {
+
+    const body =
+      await request.json();
+
+    const existingUser =
+      await prisma.user.findUnique({
+
+        where: {
+          email: body.email
+        }
+      });
+
+    if (existingUser) {
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "El correo ya existe"
+        },
+        {
+          status: 400
+        }
+      );
+    }
+
+    const prefix =
+      generatePrefix(
+        body.businessName
+      );
+
+    const referralCode =
+      generateReferralCode(
+        prefix
+      );
+
+    const passwordHash =
+      await bcrypt.hash(
+        body.password,
+        12
+      );
+
+    const settings =
+      await prisma.saaSSettings.findFirst();
+
+    const trialDays =
+      settings?.trialDays ?? 15;
+
+    const trialEndsAt =
+      new Date();
+
+    trialEndsAt.setDate(
+      trialEndsAt.getDate()
+      + trialDays
+    );
+
+    const tenant =
+      await prisma.tenant.create({
+
+        data: {
+
+          businessName:
+            body.businessName,
+
+          prefix,
+
+          referralCode,
+
+          status: "trial",
+
+          trialEndsAt
+        }
+      });
+
+    const user =
+      await prisma.user.create({
+
+        data: {
+
+          email:
+            body.email,
+
+          passwordHash,
+
+          role:
+            "restaurant_admin",
+
+          tenantId:
+            tenant.id
+        }
+      });
+
+    const restaurant =
+      await prisma.restaurant.create({
+
+        data: {
+
+          tenantId:
+            tenant.id,
+
+          name:
+            body.businessName
+        }
+      });
+
+    await prisma.referralCode.create({
+
+      data: {
+
+        tenantId:
+          tenant.id,
+
+        code:
+          referralCode
+      }
+    });
+
+    return NextResponse.json({
+
+      success: true,
+
+      tenant,
+
+      user,
+
+      restaurant
+    });
+
+  } catch (error) {
+
+    console.error(
+      "REGISTER ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "Error al registrar negocio"
+      },
+      {
+        status: 500
+      }
+    );
+  }
+}

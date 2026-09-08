@@ -38,9 +38,36 @@ export default function LoginPage() {
       await response.json();
 
     if (data.success) {
-      router.push("/saas/dashboard");
-      return;
-    }
+
+  if (data.user.role === "super_admin") {
+
+    router.push("/saas/dashboard");
+
+    return;
+  }
+
+  if (
+    data.user.role ===
+    "restaurant_admin"
+  ) {
+
+    router.push(
+      "/business/dashboard"
+    );
+
+    return;
+  }
+
+  if (
+    data.user.role ===
+    "customer"
+  ) {
+
+    router.push("/");
+
+    return;
+  }
+}
 
     alert(data.message);
   }

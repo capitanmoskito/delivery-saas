@@ -1,4 +1,6 @@
 import Link from "next/link";
+import LogoutButton
+from "@/src/components/logout-button";
 
 export default function BusinessLayout({
   children,
@@ -33,9 +35,10 @@ export default function BusinessLayout({
             <Link href="/business/orders">
               Pedidos
             </Link>
+            
 
           </nav>
-
+        <LogoutButton />
         </div>
 
       </header>

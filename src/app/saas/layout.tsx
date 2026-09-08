@@ -1,4 +1,6 @@
 import Link from "next/link";
+import LogoutButton
+from "@/src/components/logout-button";
 
 export default function SaaSLayout({
   children,
@@ -25,9 +27,9 @@ export default function SaaSLayout({
             <Link href="/saas/testimonials">Testimonios</Link>
             <Link href="/saas/banners">Banners</Link>
             <Link href="/saas/settings">Configuración</Link>
-
+            
           </nav>
-
+        <LogoutButton />
         </div>
 
       </header>

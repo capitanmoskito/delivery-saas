@@ -1,7 +1,16 @@
 import bcrypt from "bcrypt";
-import { PrismaClient, } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+
+type SeedPrismaClient = PrismaClient & {
+  businessTestimonial?: {
+    findFirst: () => Promise<unknown>;
+    create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+  };
+};
+
+const seedPrisma = prisma as unknown as SeedPrismaClient;
 
 async function main() {
 
@@ -34,11 +43,11 @@ async function main() {
   }
 
   const testimonial =
-    await prisma.businessTestimonial.findFirst();
+    await seedPrisma.businessTestimonial?.findFirst?.();
 
   if (!testimonial) {
 
-  await prisma.businessTestimonial.create({
+  await seedPrisma.businessTestimonial?.create?.({
 
     data: {
 

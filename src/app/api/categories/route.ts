@@ -23,13 +23,24 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const category = await prisma.category.create({
-      data: {
-        tenantId: body.tenantId,
-        name: body.name,
-        description: body.description,
-      },
-    });
+    const category =
+  await prisma.category.create({
+
+    data: {
+
+      tenantId:
+        body.tenantId,
+
+      name:
+        body.name,
+
+      description:
+        body.description,
+
+      imageUrl:
+        body.imageUrl
+    }
+  });
 
     return NextResponse.json(category);
   } catch (error) {

@@ -432,3 +432,21 @@ model Package {
 
   @@map("packages")
 }
+
+model BusinessCategory {
+
+  id String @id @default(uuid())
+
+  name String @unique
+
+  active Boolean
+    @default(true)
+
+  createdAt DateTime
+    @default(now())
+
+  updatedAt DateTime
+    @updatedAt
+
+  @@map("business_categories")
+}

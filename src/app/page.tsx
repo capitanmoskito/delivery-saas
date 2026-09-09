@@ -1,31 +1,36 @@
+import { prisma }
+from "@/src/lib/prisma";
 import Link from "next/link";
 
-export default function HomePage() {
+export default async function HomePage() {
+
+  const restaurants =
+    await prisma.restaurant.findMany({
+      take: 8
+    });
 
   return (
 
-    <main className="p-8">
+    <main className="container mx-auto p-6">
 
-      <h1 className="text-5xl font-bold">
+      <h1 className="mb-8 text-4xl font-bold">
 
-        Delivery SaaS
+        Negocios Cercanos
 
       </h1>
 
-      <p className="mt-4">
+      <div className="grid gap-4 md:grid-cols-4">
 
-        Tu propio sistema de pedidos.
-      </p>
-
-      <div className="mt-8 flex gap-4">
-
-        <Link href="/register-business">
-          Registrar Negocio
-        </Link>
-
-        <Link href="/login">
-          Ingresar
-        </Link>
+        {restaurants.map((restaurant) => (
+          <Link key={restaurant.id} href={`/store/${restaurant.id}`}>
+            <div className="rounded border p-4 hover:bg-slate-50">
+              <div className="mb-2 h-32 rounded bg-slate-100" />
+              <h2 className="font-bold">{restaurant.name}</h2>
+              <p>⭐ 5.0</p>
+              <p>20 min</p>
+            </div>
+          </Link>
+        ))}
 
       </div>
 

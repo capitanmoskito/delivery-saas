@@ -35,6 +35,22 @@ export default function BusinessLayout({
             <Link href="/business/orders">
               Pedidos
             </Link>
+
+            <Link href="/business/categories">
+              Categorías
+            </Link>
+
+            <Link href="/business/products">
+              Productos
+            </Link>
+
+            <Link href="/business/promotions">
+              Promociones
+            </Link>
+
+            <Link href="/business/packages">
+              Paquetes
+            </Link>
             
 
           </nav>

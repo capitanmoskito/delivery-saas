@@ -100,22 +100,31 @@ export async function POST(
       });
 
     const user =
-      await prisma.user.create({
+  await prisma.user.create({
 
-        data: {
+    data: {
 
-          email:
-            body.email,
+      firstName:
+        body.firstName,
 
-          passwordHash,
+      lastNamePaternal:
+        body.lastNamePaternal,
 
-          role:
-            "restaurant_admin",
+      lastNameMaternal:
+        body.lastNameMaternal,
 
-          tenantId:
-            tenant.id
-        }
-      });
+      email:
+        body.email,
+
+      passwordHash,
+
+      role:
+        "restaurant_admin",
+
+      tenantId:
+        tenant.id
+    }
+  });
 
     const restaurant =
       await prisma.restaurant.create({

@@ -177,6 +177,12 @@ if (!existingPromo) {
 
       data: {
 
+        firstName: "Super",
+
+        lastNamePaternal: "Admin",
+
+        lastNameMaternal: "",
+
         email: adminEmail,
 
         passwordHash,

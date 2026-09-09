@@ -71,17 +71,11 @@ model User {
 
   tenantId String?
 
-  tenant Tenant?
-    @relation(
-      fields: [tenantId],
-      references: [id]
-    )
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
 
-  createdAt DateTime
-    @default(now())
+  createdAt DateTime @default(now())
 
-  updatedAt DateTime
-    @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }
@@ -320,6 +314,33 @@ model BusinessCategory {
   @@map("business_categories")
 }
 
+model BusinessPromotion {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  name String
+
+  description String?
+
+  discountPercent Float?
+
+  discountAmount Float?
+
+  active Boolean @default(true)
+
+  startsAt DateTime?
+
+  endsAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("business_promotions")
+}
+
 model RestaurantCategory {
 
   id String @id @default(uuid())
@@ -333,4 +354,81 @@ model RestaurantCategory {
   restaurant Restaurant @relation(fields: [restaurantId], references: [id])
 
   @@map("restaurant_categories")
+}
+
+model Category {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  name String
+
+  description String?
+
+  imageUrl String?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  categoryId String
+
+  category Category @relation(fields: [categoryId], references: [id])
+
+  name String
+
+  description String?
+
+  imageUrl String?
+
+  price Float
+
+  prepMinutes Int @default(15)
+
+  active Boolean @default(true)
+
+  featured Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("products")
+}
+
+model Package {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  name String
+
+  description String?
+
+  imageUrl String?
+
+  price Float
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("packages")
 }

@@ -13,11 +13,33 @@ function generatePrefix(
     .toUpperCase();
 }
 
-function generateReferralCode(
-  prefix: string
+async function generateReferralCode(
+  businessName: string,
+  sequence: number
 ) {
 
-  return `REF-${prefix}`;
+  const random =
+    Math.floor(
+      100 +
+      Math.random() * 900
+    );
+
+  const prefix =
+    businessName
+      .replace(
+        /[^A-Za-z]/g,
+        ""
+      )
+      .toUpperCase()
+      .substring(0, 3);
+
+  const year =
+    new Date()
+      .getFullYear()
+      .toString()
+      .slice(-2);
+
+  return `${random}-${prefix}-${year}${sequence}`;
 }
 
 export async function POST(
@@ -56,10 +78,14 @@ export async function POST(
         body.businessName
       );
 
+const sequence =
+  await prisma.tenant.count() + 1;
+
     const referralCode =
-      generateReferralCode(
-        prefix
-      );
+  await generateReferralCode(
+    body.businessName,
+    sequence
+  );
 
     const passwordHash =
       await bcrypt.hash(

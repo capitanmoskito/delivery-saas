@@ -24,12 +24,12 @@ export default function BusinessLayout({
               Dashboard
             </Link>
 
-            <Link href="/business/settings">
-              Configuración
-            </Link>
-
             <Link href="/business/menu">
               Menú
+            </Link>
+
+            <Link href="/business/customers">
+              Clientes
             </Link>
 
             <Link href="/business/orders">
@@ -50,6 +50,10 @@ export default function BusinessLayout({
 
             <Link href="/business/packages">
               Paquetes
+            </Link>
+
+            <Link href="/business/settings">
+              Configuración
             </Link>
             
 

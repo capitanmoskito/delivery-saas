@@ -1,38 +1,81 @@
-import { prisma }
-from "@/src/lib/prisma";
-import Link from "next/link";
+import { prisma } from "@/src/lib/prisma";
+import StoreCard from "@/src/components/store-card";
+import MarketplaceHeader
+from "@/src/components/marketplace-header";
 
 export default async function HomePage() {
 
   const restaurants =
-    await prisma.restaurant.findMany({
-      take: 8
-    });
+    await prisma.restaurant.findMany();
 
   return (
 
-    <main className="container mx-auto p-6">
+    <main>
+      <MarketplaceHeader />
 
-      <h1 className="mb-8 text-4xl font-bold">
+      <section
+        className="
+          bg-[#D95D39]
+          px-10
+          py-20
+          text-white
+        "
+      >
 
-        Negocios Cercanos
+        <h1
+          className="
+            max-w-3xl
+            text-6xl
+            font-bold
+          "
+        >
+          Encuentra la mejor comida cerca de ti
+        </h1>
 
-      </h1>
+      </section>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <section
+        className="
+          mx-auto
+          max-w-7xl
+          p-8
+        "
+      >
 
-        {restaurants.map((restaurant) => (
-          <Link key={restaurant.id} href={`/store/${restaurant.id}`}>
-            <div className="rounded border p-4 hover:bg-slate-50">
-              <div className="mb-2 h-32 rounded bg-slate-100" />
-              <h2 className="font-bold">{restaurant.name}</h2>
-              <p>⭐ 5.0</p>
-              <p>20 min</p>
-            </div>
-          </Link>
-        ))}
+        <h2
+          className="
+            mb-8
+            text-3xl
+            font-bold
+          "
+        >
+          Negocios cercanos
+        </h2>
 
-      </div>
+        <div
+          className="
+            grid
+            gap-6
+            md:grid-cols-2
+            lg:grid-cols-4
+          "
+        >
+
+          {restaurants.map(
+            (restaurant) => (
+
+              <StoreCard
+                key={restaurant.id}
+                id={restaurant.id}
+                name={restaurant.name}
+              />
+
+            )
+          )}
+
+        </div>
+
+      </section>
 
     </main>
   );

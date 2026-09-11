@@ -21,6 +21,15 @@ enum UserRole {
   customer
 }
 
+enum SettingsOtpStatus {
+
+  PENDING
+
+  VERIFIED
+
+  EXPIRED
+}
+
 enum Currency {
 
   MXN
@@ -42,6 +51,13 @@ enum Currency {
   PEN
 
   BRL
+}
+
+enum PromotionType {
+  percentage
+  fixed_amount
+  free_month
+  free_setup
 }
 
 model Tenant {
@@ -124,6 +140,71 @@ model Restaurant {
   @@map("restaurants")
 }
 
+model BusinessProfile {
+
+  id String @id @default(uuid())
+
+  tenantId String @unique
+
+  restaurantId String?
+
+  businessName String
+
+  legalName String?
+
+  description String?
+
+  phone String?
+
+  email String?
+
+  website String?
+
+  facebookUrl String?
+
+  instagramUrl String?
+
+  tiktokUrl String?
+
+  logoUrl String?
+
+  bannerUrl String?
+
+  galleryUrls String[] @default([])
+
+  country String?
+
+  state String?
+
+  city String?
+
+  neighborhood String?
+
+  addressLine String?
+
+  postalCode String?
+
+  latitude Float?
+
+  longitude Float?
+
+  adminEmail String?
+
+  contactEmail String?
+
+  phonePrefix String?
+
+  phoneNumber String?
+
+  currency Currency @default(MXN)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("business_profiles")
+}
+
 model SaaSSettings {
   id String @id @default(uuid())
 
@@ -146,6 +227,64 @@ model SaaSSettings {
   @@map("saas_settings")
 }
 
+model SettingsOtp {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  userId String
+
+  code String
+
+  status SettingsOtpStatus @default(PENDING)
+
+  expiresAt DateTime
+
+  verifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@map("settings_otps")
+}
+
+
+model SettingsEditSession {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  userId String
+
+  active Boolean @default(true)
+
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+
+  @@map("settings_edit_sessions")
+}
+
+model PasswordResetSession {
+
+  id String @id @default(uuid())
+
+  userId String
+
+  tenantId String
+
+  tokenHash String @unique
+
+  expiresAt DateTime
+
+  usedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_sessions")
+}
+
 model SubscriptionPlan {
   id String @id @default(uuid())
 
@@ -162,13 +301,6 @@ model SubscriptionPlan {
   updatedAt DateTime @updatedAt
 
   @@map("subscription_plans")
-}
-
-enum PromotionType {
-  percentage
-  fixed_amount
-  free_month
-  free_setup
 }
 
 model SaaSPromotion {
@@ -223,6 +355,25 @@ model BusinessTestimonial {
   tenant Tenant? @relation(fields: [tenantId], references: [id])
 
   @@map("business_testimonials")
+}
+
+model BusinessConfigurationAudit {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  userId String
+
+  fieldName String
+
+  previousValue String?
+
+  newValue String
+
+  createdAt DateTime @default(now())
+
+  @@map("business_configuration_audit")
 }
 
 model ReferralCode {

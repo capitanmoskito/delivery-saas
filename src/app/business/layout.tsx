@@ -1,12 +1,32 @@
 import Link from "next/link";
+
 import LogoutButton
 from "@/src/components/logout-button";
 
-export default function BusinessLayout({
+import { getCurrentUser }
+from "@/src/lib/current-user";
+
+import { prisma }
+from "@/src/lib/prisma";
+
+export default async function BusinessLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const user = await getCurrentUser();
+
+  const tenant = user?.tenantId
+    ? await prisma.tenant.findUnique({
+        where: {
+          id: user.tenantId
+        },
+        select: {
+          businessName: true
+        }
+      })
+    : null;
+
   return (
     <div className="min-h-screen bg-slate-50">
 
@@ -15,7 +35,7 @@ export default function BusinessLayout({
         <div className="mx-auto flex max-w-7xl items-center justify-between p-4">
 
           <h1 className="text-xl font-bold">
-            Portal Negocio
+            {tenant?.businessName || "Portal Negocio"}
           </h1>
 
           <nav className="flex flex-wrap gap-4">

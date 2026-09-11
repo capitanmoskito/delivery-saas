@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,6 +13,9 @@ export default function LoginPage() {
 
   const [password, setPassword] =
     useState("");
+
+  const [showPassword, setShowPassword] =
+    useState(false);
 
   async function handleLogin() {
 
@@ -94,17 +99,31 @@ export default function LoginPage() {
           className="mb-3 w-full border p-2"
         />
 
-        <input
-          type="password"
-          value={password}
-          onChange={(e)=>
-            setPassword(
-              e.target.value
-            )
-          }
-          placeholder="Contraseña"
-          className="mb-3 w-full border p-2"
-        />
+        <div className="relative mb-3">
+          <input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Contraseña"
+            className="w-full border p-2 pr-10"
+          />
+
+          <button
+            type="button"
+            className="absolute right-2 top-2"
+            onClick={() => setShowPassword(!showPassword)}
+            aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+          >
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
+
+        <Link
+          href="/forgot-password"
+          className="mb-3 block text-sm text-[#D95D39] hover:underline"
+        >
+          Olvidé mi contraseña
+        </Link>
 
         <button
           onClick={handleLogin}

@@ -25,6 +25,36 @@ export async function POST(
     );
   }
 
+  if (file.size > 5 * 1024 * 1024) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "La imagen excede 5 MB"
+      },
+      {
+        status: 400
+      }
+    );
+  }
+
+  const kind =
+    data.get("kind") === "banner"
+      ? "banner"
+      : data.get("kind") === "logo"
+        ? "logo"
+        : data.get("kind") === "gallery"
+          ? "gallery"
+          : "product";
+
+  const dimensions =
+    kind === "banner"
+      ? [1600, 900]
+      : kind === "logo"
+        ? [500, 500]
+        : kind === "gallery"
+          ? [800, 600]
+          : [800, 600];
+
   const bytes =
     await file.arrayBuffer();
 
@@ -34,7 +64,7 @@ export async function POST(
   const optimizedImage =
   await sharp(buffer)
 
-    .resize(800, 600, {
+    .resize(dimensions[0], dimensions[1], {
       fit: "cover"
     })
 
@@ -45,7 +75,7 @@ export async function POST(
     .toBuffer();
 
   const fileName =
-    `${Date.now()}-${file.name}`;
+    `${Date.now()}-${kind}.webp`;
 
   const uploadPath =
     path.join(
@@ -59,23 +89,6 @@ export async function POST(
   uploadPath,
   optimizedImage
 );
-
-if (
-  file.size >
-  5 * 1024 * 1024
-) {
-
-  return NextResponse.json(
-    {
-      success: false,
-      message:
-        "La imagen excede 5 MB"
-    },
-    {
-      status: 400
-    }
-  );
-}
 
   return NextResponse.json({
     success: true,

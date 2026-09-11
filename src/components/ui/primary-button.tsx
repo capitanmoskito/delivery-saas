@@ -9,7 +9,7 @@ export default function PrimaryButton({
       {...props}
       className="
         rounded-xl
-        bg-[#D95D39]
+        bg-action
         px-5
         py-3
         text-white

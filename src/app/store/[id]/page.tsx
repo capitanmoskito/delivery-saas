@@ -4,16 +4,18 @@ from "@/src/lib/prisma";
 export default async function StorePage({
   params
 }: {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }) {
+
+  const { id } = await params;
 
   const restaurant =
     await prisma.restaurant.findUnique({
 
       where: {
-        id: params.id
+        id
       }
     });
 

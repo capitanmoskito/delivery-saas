@@ -15,6 +15,10 @@ export default function CategoriesPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [savedImageUrl, setSavedImageUrl] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function loadCategories() {
     const response = await fetch("/api/categories");
@@ -22,67 +26,76 @@ export default function CategoriesPage() {
     setCategories(data);
   }
 
-  async function createCategory() {
+  async function saveCategory() {
+    setError("");
+    setSaving(true);
 
-    let imageUrl = "";
+    try {
+      let imageUrl = savedImageUrl;
 
-    if (file) {
+      if (file) {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("kind", "category");
 
-      const formData =
-        new FormData();
+        const uploadResponse = await fetch("/api/upload", {
+          method: "POST",
+          body: formData
+        });
+        const uploadData = await uploadResponse.json();
 
-      formData.append(
-        "file",
-        file
-      );
+        if (!uploadResponse.ok || !uploadData.success) {
+          setError(uploadData.message || "No se pudo subir la imagen");
+          return;
+        }
 
-      const uploadResponse =
-        await fetch(
-          "/api/upload",
-          {
-            method: "POST",
-            body: formData,
-          }
-        );
-
-      const uploadData =
-        await uploadResponse.json();
-
-      imageUrl =
-        uploadData.url;
-    }
-
-    await fetch(
-      "/api/categories",
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-        },
-
-        body: JSON.stringify({
-
-          tenantId:
-            "TEMP",
-
-          name,
-
-          description,
-
-          imageUrl,
-        }),
+        imageUrl = uploadData.url;
       }
-    );
 
+      const response = await fetch("/api/categories", {
+        method: editingCategoryId ? "PUT" : "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          id: editingCategoryId,
+          name,
+          description,
+          imageUrl
+        })
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || "No se pudo guardar la categoría");
+        return;
+      }
+
+      resetForm();
+      await loadCategories();
+    } catch {
+      setError("No se pudo conectar con el servidor");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetForm() {
     setName("");
-
     setDescription("");
-
     setFile(null);
+    setSavedImageUrl("");
+    setEditingCategoryId(null);
+  }
 
-    loadCategories();
+  function editCategory(category: CategoryItem) {
+    setName(category.name);
+    setDescription(category.description || "");
+    setFile(null);
+    setSavedImageUrl(category.imageUrl || "");
+    setEditingCategoryId(category.id);
+    setError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   useEffect(() => {
@@ -122,7 +135,7 @@ export default function CategoriesPage() {
 
         <h2 className="mb-4 text-xl font-semibold">
 
-          Nueva Categoría
+          {editingCategoryId ? "Editar categoría" : "Nueva categoría"}
 
         </h2>
 
@@ -150,79 +163,23 @@ export default function CategoriesPage() {
             placeholder="Descripción"
           />
 
-          <div
-  onDragOver={(e) =>
-    e.preventDefault()
-  }
-  onDrop={(e) => {
 
-    e.preventDefault();
-
-    const droppedFile =
-      e.dataTransfer.files[0];
-
-    if (droppedFile) {
-      setFile(
-        droppedFile
-      );
-    }
-  }}
-  className="flex h-40 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 bg-slate-50"
->
-
-  <p className="font-medium">
-
-    Arrastra aquí tu imagen
-
-  </p>
-
-  <p className="text-sm text-gray-500">
-
-    o selecciona una desde tu equipo
-
-  </p>
-
-  <input
-    type="file"
-    accept="image/*"
-    className="mt-4"
-    onChange={(e)=>
-      setFile(
-        e.target.files?.[0]
-        ?? null
-      )
-    }
-  />
-
-</div>
-
-<p className="text-xs text-gray-500">
-
-Máximo 5 MB
-
-PNG, JPG o WEBP
-
-</p>
-
-          {file && (
-            <Image
-              src={URL.createObjectURL(file)}
-              alt="Vista previa de la categoría"
-              width={160}
-              height={160}
-              unoptimized
-              className="mt-4 h-40 rounded object-cover"
-            />
-          )}
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
           <button
-            onClick={
-              createCategory
-            }
-            className="rounded bg-black px-4 py-2 text-white"
+            type="button"
+            onClick={saveCategory}
+            disabled={saving || !name.trim()}
+            className="rounded bg-action px-4 py-2 text-white disabled:cursor-not-allowed disabled:bg-gray-400"
           >
-            Crear Categoría
+            {saving ? "Guardando..." : editingCategoryId ? "Guardar cambios" : "Crear categoría"}
           </button>
+
+          {editingCategoryId && (
+            <button type="button" onClick={resetForm} className="ml-2 rounded border px-4 py-2">
+              Cancelar
+            </button>
+          )}
 
         </div>
 
@@ -238,18 +195,6 @@ PNG, JPG o WEBP
               className="rounded border p-4"
             >
 
-              {category.imageUrl && (
-                <div className="relative mb-3 h-40 w-full overflow-hidden rounded">
-                  <Image
-                    src={category.imageUrl}
-                    alt={category.name}
-                    fill
-                    unoptimized
-                    className="object-cover"
-                  />
-                </div>
-              )}
-
               <h2 className="font-bold">
 
                 {category.name}
@@ -263,6 +208,14 @@ PNG, JPG o WEBP
                 }
 
               </p>
+
+              <button
+                type="button"
+                onClick={() => editCategory(category)}
+                className="mt-4 rounded border px-3 py-2 text-sm"
+              >
+                Editar categoría
+              </button>
 
             </div>
 

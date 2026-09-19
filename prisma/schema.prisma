@@ -60,6 +60,11 @@ enum PromotionType {
   free_setup
 }
 
+enum BusinessPromotionDiscountType {
+  percentage
+  fixed_amount
+}
+
 model Tenant {
   id String @id @default(uuid())
 
@@ -110,6 +115,10 @@ model User {
   tenantId String?
 
   tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  customerAddresses CustomerAddress[]
+
+  customerProfiles Customer[]
 
   createdAt DateTime @default(now())
 
@@ -526,6 +535,10 @@ model BusinessPromotion {
 
   description String?
 
+  imageUrl String?
+
+  discountType BusinessPromotionDiscountType?
+
   discountPercent Float?
 
   discountAmount Float?
@@ -535,6 +548,20 @@ model BusinessPromotion {
   startsAt DateTime?
 
   endsAt DateTime?
+
+  appliesToTakeawayDelivery Boolean @default(true)
+
+  appliesToLocalOrders Boolean @default(false)
+
+  appliesToCash Boolean @default(true)
+
+  appliesToCard Boolean @default(true)
+
+  targetProducts PromotionTargetProduct[]
+
+  requiredProducts PromotionRequiredProduct[]
+
+  freeProducts PromotionFreeProduct[]
 
   createdAt DateTime @default(now())
 
@@ -595,6 +622,12 @@ model Product {
 
   packageItems PackageItem[]
 
+  promotionTargets PromotionTargetProduct[] @relation("PromotionTargetProduct")
+
+  promotionRequirements PromotionRequiredProduct[] @relation("PromotionRequiredProduct")
+
+  promotionFreeItems PromotionFreeProduct[] @relation("PromotionFreeProduct")
+
   orderItems OrderItem[]
 
   name String
@@ -616,6 +649,61 @@ model Product {
   updatedAt DateTime @updatedAt
 
   @@map("products")
+}
+
+model PromotionTargetProduct {
+
+  id String @id @default(uuid())
+
+  promotionId String
+
+  productId String
+
+  promotion BusinessPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  product Product @relation("PromotionTargetProduct", fields: [productId], references: [id])
+
+  @@unique([promotionId, productId])
+  @@index([productId])
+  @@map("promotion_target_products")
+}
+
+model PromotionRequiredProduct {
+
+  id String @id @default(uuid())
+
+  promotionId String
+
+  productId String
+
+  quantity Int @default(1)
+
+  promotion BusinessPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  product Product @relation("PromotionRequiredProduct", fields: [productId], references: [id])
+
+  @@unique([promotionId, productId])
+  @@index([productId])
+  @@map("promotion_required_products")
+}
+
+model PromotionFreeProduct {
+
+  id String @id @default(uuid())
+
+  promotionId String
+
+  productId String
+
+  quantity Int @default(1)
+
+  promotion BusinessPromotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+
+  product Product @relation("PromotionFreeProduct", fields: [productId], references: [id])
+
+  @@unique([promotionId, productId])
+  @@index([productId])
+  @@map("promotion_free_products")
 }
 
 model ProductVariant {
@@ -665,6 +753,8 @@ model Package {
 
   items PackageItem[]
 
+  complements PackageComplement[]
+
   @@map("packages")
 }
 
@@ -685,11 +775,31 @@ model PackageItem {
   @@map("package_items")
 }
 
+model PackageComplement {
+
+  id String @id @default(uuid())
+
+  packageId String
+
+  name String
+
+  price Float @default(0)
+
+  active Boolean @default(true)
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@index([packageId])
+  @@map("package_complements")
+}
+
 model Customer {
 
   id String @id @default(uuid())
 
   tenantId String
+
+  userId String?
 
   firstName String
 
@@ -705,7 +815,47 @@ model Customer {
 
   orders Order[]
 
+  user User? @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, userId])
+
   @@map("customers")
+}
+
+model CustomerAddress {
+
+  id String @id @default(uuid())
+
+  userId String
+
+  street String
+
+  postalCode String
+
+  neighborhood String
+
+  city String
+
+  state String
+
+  country String @default("México")
+
+  reference String?
+
+  contactPhone String?
+
+  latitude Float?
+
+  longitude Float?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("customer_addresses")
 }
 
 model Order {
@@ -716,11 +866,55 @@ model Order {
 
   customerId String
 
+  orderNumber String?
+
+  source String @default("online")
+
+  fulfillmentType String @default("delivery")
+
+  paymentStatus String @default("pending")
+
+  paymentMethod String @default("cash")
+
+  customerName String?
+
+  tableNumber String?
+
+  deliveryAddress String?
+
+  postalCode String?
+
+  neighborhood String?
+
+  city String?
+
+  state String?
+
+  deliveryReference String?
+
+  contactPhone String?
+
+  latitude Float?
+
+  longitude Float?
+
   status String
 
   subtotal Float
 
   total Float
+
+  discountTotal Float @default(0)
+
+  appliedPromotions Json?
+
+  acceptedAt DateTime?
+
+  preparingAt DateTime?
+
+  readyAt DateTime?
+
+  paidAt DateTime?
 
   createdAt DateTime @default(now())
 
@@ -747,9 +941,37 @@ model OrderItem {
 
   totalPrice Float
 
+  additions Json?
+
   order Order @relation(fields: [orderId], references: [id])
 
   product Product @relation(fields: [productId], references: [id])
 
   @@map("order_items")
+}
+
+model BusinessDayClosure {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  startsAt DateTime
+
+  endsAt DateTime
+
+  orderCount Int
+
+  totalAmount Float
+
+  onlineOrderCount Int
+
+  localOrderCount Int
+
+  summary Json
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, endsAt])
+  @@map("business_day_closures")
 }

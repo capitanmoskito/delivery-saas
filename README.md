@@ -20,6 +20,18 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Location services
+
+Copy `.env.example` to `.env.local` and set the following values before using postal-code lookup or interactive maps:
+
+```env
+COPOMEX_TOKEN=your_copomex_token
+MAPBOX_ACCESS_TOKEN=your_mapbox_secret_token
+NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_public_token
+```
+
+Restart `npm run dev` after changing environment variables. `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` is required by the browser map; the other tokens stay on the server.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

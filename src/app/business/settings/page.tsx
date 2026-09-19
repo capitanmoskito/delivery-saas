@@ -19,6 +19,9 @@ import {
 import PasswordConfirmModal
 from "@/src/components/settings/password-confirm-modal";
 
+import AddressFields
+from "@/src/components/location/address-fields";
+
 import { countries }
 from "@/src/constants/countries";
 
@@ -1014,7 +1017,7 @@ const hasProfileChanges =
   className="
     relative
     block
-    aspect-[16/9]
+    aspect-video
     w-full
     overflow-hidden
     rounded-2xl
@@ -1379,125 +1382,7 @@ const hasProfileChanges =
 
   </section>
 
-  <section className="rounded-3xl border p-8">
-
-    <h2 className="mb-6 text-2xl font-bold">
-      Ubicación del Negocio
-    </h2>
-
-    <div className="mb-4 flex aspect-video items-center justify-center rounded-xl border bg-slate-100 text-slate-500">
-      <div
-  className="
-    text-center
-    space-y-2
-  "
->
-
-  <div className="text-5xl">
-
-    📍
-
-  </div>
-
-  <p>
-
-    Mapa interactivo próximamente
-
-  </p>
-
-  <p
-    className="
-      text-xs
-      text-slate-500
-    "
-  >
-
-    La georreferencia del negocio
-    se utilizará para:
-
-  </p>
-
-  <ul
-    className="
-      text-xs
-      text-slate-500
-    "
-  >
-
-    <li>
-      Delivery
-    </li>
-
-    <li>
-      Negocios cercanos
-    </li>
-
-    <li>
-      Cobertura
-    </li>
-
-    <li>
-      Marketplace
-    </li>
-
-  </ul>
-
-</div>
-{
-
-  latitude && longitude && (
-
-    <div
-      className="
-        mt-4
-        rounded-lg
-        bg-slate-50
-        p-3
-        text-sm
-      "
-    >
-
-      <p>
-
-        Latitud:
-
-        {latitude}
-
-      </p>
-
-      <p>
-
-        Longitud:
-
-        {longitude}
-
-      </p>
-
-    </div>
-
-  )
-
-}
-    </div>
-
-    <div className="grid gap-4 md:grid-cols-2">
-      <input
-        className="w-full border p-3"
-        placeholder="Latitud"
-        inputMode="decimal"
-        value={latitude}
-        onChange={(event) => setLatitude(event.target.value)}
-      />
-      <input
-        className="w-full border p-3"
-        placeholder="Longitud"
-        inputMode="decimal"
-        value={longitude}
-        onChange={(event) => setLongitude(event.target.value)}
-      />
-    </div>
-
-  </section>
+  
 
   <section className="rounded-3xl border p-8">
 
@@ -1507,79 +1392,32 @@ const hasProfileChanges =
 
     </h2>
 
-    <div className="space-y-4">
-
-      <input
-        className="w-full border p-3"
-        placeholder="Código Postal"
-        value={postalCode}
-        onChange={(e)=>
-          setPostalCode(
-            e.target.value
-          )
-        }
-      />
-
-      <input
-        className="w-full border p-3"
-        placeholder="Colonia"
-        value={
-          neighborhood
-        }
-        onChange={(e)=>
-          setNeighborhood(
-            e.target.value
-          )
-        }
-      />
-
-      <input
-        className="w-full border p-3"
-        placeholder="Municipio"
-        value={city}
-        onChange={(e)=>
-          setCity(
-            e.target.value
-          )
-        }
-      />
-
-      <input
-        className="w-full border p-3"
-        placeholder="Estado"
-        value={state}
-        onChange={(e)=>
-          setState(
-            e.target.value
-          )
-        }
-      />
-
-      <input
-        className="w-full border p-3"
-        placeholder="País"
-        value={country}
-        onChange={(e)=>
-          setCountry(
-            e.target.value
-          )
-        }
-      />
-
-      <textarea
-        className="w-full border p-3"
-        placeholder="Dirección"
-        value={
-          addressLine
-        }
-        onChange={(e)=>
-          setAddressLine(
-            e.target.value
-          )
-        }
-      />
-
-    </div>
+    <AddressFields
+      disabled={locked}
+      includeContact={false}
+      value={{
+        street: addressLine,
+        postalCode,
+        neighborhood,
+        city,
+        state,
+        country,
+        reference: "",
+        contactPhone: "",
+        latitude: latitude ? Number(latitude) : null,
+        longitude: longitude ? Number(longitude) : null
+      }}
+      onChange={(address) => {
+        setAddressLine(address.street);
+        setPostalCode(address.postalCode);
+        setNeighborhood(address.neighborhood);
+        setCity(address.city);
+        setState(address.state);
+        setCountry(address.country);
+        setLatitude(address.latitude === null ? "" : String(address.latitude));
+        setLongitude(address.longitude === null ? "" : String(address.longitude));
+      }}
+    />
 
   </section>
   

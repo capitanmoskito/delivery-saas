@@ -5,8 +5,12 @@ from "@/src/components/marketplace-header";
 
 export default async function HomePage() {
 
-  const restaurants =
-    await prisma.restaurant.findMany();
+  const restaurants = await prisma.restaurant.findMany({
+    where: { active: true },
+    include: { tenant: true }
+  });
+  const profiles = await prisma.businessProfile.findMany({ where: { tenantId: { in: restaurants.map((restaurant) => restaurant.tenantId) } } });
+  const profilesByTenant = new Map(profiles.map((profile) => [profile.tenantId, profile]));
 
   return (
 
@@ -67,7 +71,8 @@ export default async function HomePage() {
               <StoreCard
                 key={restaurant.id}
                 id={restaurant.id}
-                name={restaurant.name}
+                name={profilesByTenant.get(restaurant.tenantId)?.businessName || restaurant.name}
+                imageUrl={profilesByTenant.get(restaurant.tenantId)?.bannerUrl || profilesByTenant.get(restaurant.tenantId)?.logoUrl || undefined}
               />
 
             )

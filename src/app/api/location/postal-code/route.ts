@@ -11,25 +11,45 @@ export async function GET(request: Request) {
       "postalCode"
     ) || "";
 
+  if (!process.env.COPOMEX_TOKEN) {
+    return NextResponse.json(
+      {
+        message: "COPOMEX no está configurado"
+      },
+      {
+        status: 503
+      }
+    );
+  }
+
   const result =
     await lookupPostalCode(
       postalCode
     );
 
+  if (!result) {
+    return NextResponse.json(
+      {
+        message: "No se encontraron datos para ese código postal"
+      },
+      {
+        status: 404
+      }
+    );
+  }
+
   return NextResponse.json({
 
     country:
-      result?.country || "México",
+      result.country,
 
     state:
-      result?.state || "",
+      result.state,
 
     city:
-      result?.city || "",
+      result.city,
 
     neighborhoods:
-      result
-        ? [result.neighborhood]
-        : []
+      result.neighborhoods
   });
 }

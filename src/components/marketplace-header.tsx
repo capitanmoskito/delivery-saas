@@ -31,8 +31,20 @@ export default function MarketplaceHeader() {
 
         <div className="flex gap-4">
 
+          <Link href="/cart">
+            Carrito
+          </Link>
+
+          <Link href="/customer/profile">
+            Perfil
+          </Link>
+
           <Link href="/login">
             Ingresar
+          </Link>
+
+          <Link href="/customer/register">
+            Crear cuenta
           </Link>
 
           <Link href="/register-business">

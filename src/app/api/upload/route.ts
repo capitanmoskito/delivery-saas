@@ -44,7 +44,11 @@ export async function POST(
         ? "logo"
         : data.get("kind") === "gallery"
           ? "gallery"
-          : "product";
+          : data.get("kind") === "package"
+            ? "package"
+            : data.get("kind") === "promotion"
+              ? "promotion"
+              : "product";
 
   const dimensions =
     kind === "banner"
@@ -53,7 +57,11 @@ export async function POST(
         ? [500, 500]
         : kind === "gallery"
           ? [800, 600]
-          : [800, 600];
+          : kind === "package"
+            ? [800, 600]
+            : kind === "promotion"
+              ? [800, 600]
+              : [800, 600];
 
   const bytes =
     await file.arrayBuffer();

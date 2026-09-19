@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { AuthService }
   from "@/src/modules/auth/auth.service";
 
+import { sanitizeInput} from "@/src/lib/input-sanitizer";
+
 export async function POST(
   request: Request
 ) {
@@ -11,6 +13,16 @@ export async function POST(
 
     const body =
       await request.json();
+      
+      body.email =
+        sanitizeInput(
+          body.email
+      );
+
+      body.password =
+        sanitizeInput(
+          body.password
+      );
 
     const authService =
       new AuthService();

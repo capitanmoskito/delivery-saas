@@ -171,6 +171,8 @@ model BusinessProfile {
   bannerUrl String?
 
   galleryUrls String[] @default([])
+  
+  schedules BusinessSchedule[]
 
   country String?
 
@@ -203,6 +205,31 @@ model BusinessProfile {
   updatedAt DateTime @updatedAt
 
   @@map("business_profiles")
+}
+
+model BusinessSchedule {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  businessProfileId String?
+
+  dayOfWeek Int
+
+  enabled Boolean @default(false)
+
+  openTime String?
+
+  closeTime String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  businessProfile BusinessProfile? @relation(fields: [businessProfileId], references: [id])
+
+  @@map("business_schedules")
 }
 
 model SaaSSettings {
@@ -564,6 +591,8 @@ model Product {
 
   category Category @relation(fields: [categoryId], references: [id])
 
+  variants ProductVariant[]
+
   packageItems PackageItem[]
 
   orderItems OrderItem[]
@@ -587,6 +616,31 @@ model Product {
   updatedAt DateTime @updatedAt
 
   @@map("products")
+}
+
+model ProductVariant {
+
+  id String @id @default(uuid())
+
+  tenantId String
+
+  productId String
+
+  name String
+
+  price Float @default(0)
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([productId])
+  @@map("product_variants")
 }
 
 model Package {

@@ -57,6 +57,12 @@ export default async function MenuPage() {
 
                     </p>
 
+                    {product.description && (
+                      <p className="mt-2 text-sm text-slate-600">
+                        {product.description}
+                      </p>
+                    )}
+
                   </div>
 
                 )

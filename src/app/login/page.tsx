@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
+import { sanitizeInput} from "@/src/lib/input-sanitizer";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,6 +20,12 @@ export default function LoginPage() {
 
   async function handleLogin() {
 
+    const cleanEmail =
+      sanitizeInput(email);
+
+    const cleanPassword =
+      sanitizeInput(password);
+
     const response =
       await fetch(
         "/api/auth/login",
@@ -32,9 +39,9 @@ export default function LoginPage() {
 
           body: JSON.stringify({
 
-            email,
+            email: cleanEmail,
 
-            password
+            password: cleanPassword
           })
         }
       );
@@ -85,25 +92,21 @@ export default function LoginPage() {
 
         <h1 className="mb-4 text-xl font-semibold">
 
-          Login SaaS
+          Login
         </h1>
 
         <input
           value={email}
-          onChange={(e)=>
-            setEmail(
-              e.target.value
-            )
-          }
-          placeholder="Correo"
-          className="mb-3 w-full border p-2"
+          onChange={(e)=> setEmail(sanitizeInput(e.target.value))}
+            placeholder="Correo"
+            className="mb-3 w-full border p-2"
         />
 
         <div className="relative mb-3">
           <input
             type={showPassword ? "text" : "password"}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => setPassword(sanitizeInput(e.target.value))}
             placeholder="Contraseña"
             className="w-full border p-2 pr-10"
           />

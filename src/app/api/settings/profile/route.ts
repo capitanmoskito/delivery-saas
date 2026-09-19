@@ -40,7 +40,10 @@ export async function GET() {
       prisma.businessProfile.findUnique({
         where: {
           tenantId: user.tenantId
-        }
+        },
+        include: {
+          schedules: true
+      }
       }),
       prisma.tenant.findUnique({
         where: {
@@ -85,6 +88,8 @@ export async function GET() {
       profile: profile
         ? {
             ...profile,
+            schedules:
+              profile.schedules ?? [],
             businessName:
               tenant?.businessName ||
               profile.businessName
@@ -232,6 +237,13 @@ export async function POST(request: Request) {
       currency: currencyValue
     };
 
+    const schedules =
+      Array.isArray(
+        body.schedules
+      )
+        ? body.schedules
+        : [];
+
     const modifiedSections = [
       [
         "Nombre comercial",
@@ -284,6 +296,12 @@ export async function POST(request: Request) {
       .map(([section]) => section);
 
     const profile = await prisma.$transaction(async (transaction) => {
+      await transaction.businessSchedule.deleteMany({
+        where: {
+          tenantId: user.tenantId
+        }
+      });
+
       const savedProfile = await transaction.businessProfile.upsert({
         where: {
           tenantId: user.tenantId
@@ -294,6 +312,52 @@ export async function POST(request: Request) {
         },
         update: profileData
       });
+
+      if (
+  schedules.length
+) {
+
+  await transaction.businessSchedule.createMany({
+
+    data:
+
+      schedules.map(
+
+        (
+          schedule: {
+            day: string;
+
+            enabled: boolean;
+
+            openTime: string;
+
+            closeTime: string;
+          },
+
+          index: number
+
+        ) => ({
+
+          tenantId:
+            user.tenantId,
+
+          businessProfileId:
+            savedProfile.id,
+
+          dayOfWeek:
+            index + 1,
+
+          enabled:
+            schedule.enabled,
+
+          openTime:
+            schedule.openTime,
+
+          closeTime:
+            schedule.closeTime
+        }))
+  });
+}
 
       await transaction.tenant.update({
         where: {

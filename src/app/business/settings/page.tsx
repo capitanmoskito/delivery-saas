@@ -31,6 +31,32 @@ from "@/src/lib/business-settings-validator";
 import { validatePassword }
 from "@/src/lib/password-validator";
 
+type Schedule = {
+  day: string;
+  enabled: boolean;
+  openTime: string;
+  closeTime: string;
+};
+
+const scheduleDays = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+  "Domingo"
+];
+
+function createDefaultSchedules(): Schedule[] {
+  return scheduleDays.map((day) => ({
+    day,
+    enabled: false,
+    openTime: "03:00 PM",
+    closeTime: "11:00 PM"
+  }));
+}
+
 export default function SettingsPage() {
 
   const router = useRouter();
@@ -139,6 +165,10 @@ const [currency,
   setCurrency] =
   useState("MXN");
 
+const [schedules,
+  setSchedules] =
+  useState<Schedule[]>(createDefaultSchedules);
+
 const [initialProfile,
   setInitialProfile] =
   useState({
@@ -158,7 +188,8 @@ const [initialProfile,
     longitude: "",
     logoUrl: "",
     bannerUrl: "",
-    galleryUrls: [] as string[]
+    galleryUrls: [] as string[],
+    schedules: createDefaultSchedules()
   });
 
 const [lastModification,
@@ -266,6 +297,23 @@ const [passwordError,
         setLogoUrl(profile.logoUrl || "");
         setBannerUrl(profile.bannerUrl || "");
         setGalleryUrls(profile.galleryUrls || []);
+        const loadedSchedules: Schedule[] = profile.schedules?.length
+          ? profile.schedules.map(
+              (schedule: {
+                dayOfWeek: number;
+                enabled: boolean;
+                openTime: string | null;
+                closeTime: string | null;
+              }) => ({
+                day: scheduleDays[schedule.dayOfWeek - 1],
+                enabled: schedule.enabled,
+                openTime: schedule.openTime ?? "03:00 PM",
+                closeTime: schedule.closeTime ?? "11:00 PM"
+              })
+            )
+          : createDefaultSchedules();
+
+        setSchedules(loadedSchedules);
 
         setLastModification(
           data.lastModification ||
@@ -293,7 +341,8 @@ const [passwordError,
             : String(profile.longitude),
           logoUrl: profile.logoUrl || "",
           bannerUrl: profile.bannerUrl || "",
-          galleryUrls: profile.galleryUrls || []
+          galleryUrls: profile.galleryUrls || [],
+          schedules: loadedSchedules.map((schedule) => ({ ...schedule }))
         });
       } catch {
         setError(
@@ -343,25 +392,52 @@ const passwordValid =
 
 const hasProfileChanges =
   JSON.stringify({
+
     businessName,
+
     description,
+
     phonePrefix,
+
     phoneNumber,
+
     contactEmail,
+
     postalCode,
+
     country,
+
     state,
+
     city,
+
     neighborhood,
+
     addressLine,
+
     currency,
+
     latitude,
+
     longitude,
+
     logoUrl,
+
     bannerUrl,
-    galleryUrls
+
+    galleryUrls,
+
+    schedules
+
   }) !==
-  JSON.stringify(initialProfile);
+
+  JSON.stringify({
+
+    ...initialProfile,
+
+    schedules:
+      initialProfile.schedules ?? []
+  });
 
 
   async function sendOtp() {
@@ -485,6 +561,7 @@ const hasProfileChanges =
               phonePrefix,
               phoneNumber,
               contactEmail,
+              schedules,
               postalCode,
               country,
               state,
@@ -553,7 +630,8 @@ const hasProfileChanges =
         longitude,
         logoUrl,
         bannerUrl,
-        galleryUrls
+        galleryUrls,
+        schedules
       });
 
       setSaveMessage(
@@ -710,6 +788,38 @@ const hasProfileChanges =
     }
   }
 
+  const timeOptions = [
+
+  "12:00 AM",
+  "01:00 AM",
+  "02:00 AM",
+  "03:00 AM",
+  "04:00 AM",
+  "05:00 AM",
+
+  "06:00 AM",
+  "07:00 AM",
+  "08:00 AM",
+  "09:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+
+  "12:00 PM",
+  "01:00 PM",
+  "02:00 PM",
+  "03:00 PM",
+  "04:00 PM",
+  "05:00 PM",
+
+  "06:00 PM",
+  "07:00 PM",
+  "08:00 PM",
+  "09:00 PM",
+  "10:00 PM",
+  "11:00 PM",
+];
+
+
   return (
 
     <div className="max-w-5xl">
@@ -754,6 +864,390 @@ const hasProfileChanges =
 
 <div className="space-y-8">
 
+  <section className="rounded-3xl border p-8">
+
+    <h2 className="mb-6 text-2xl font-bold">
+      Branding
+    </h2>
+
+    <div className="grid gap-6 md:grid-cols-2">
+      <label
+  className="
+    relative
+    block
+    aspect-square
+    w-full
+    overflow-hidden
+    rounded-2xl
+    border-2
+    border-dashed
+    border-slate-300
+    cursor-pointer
+  "
+  onDragOver={(event) =>
+    event.preventDefault()
+  }
+  onDrop={(event) => {
+
+    event.preventDefault();
+
+    const file =
+      event.dataTransfer.files[0];
+
+    if (file) {
+
+      uploadAsset(
+        file,
+        "logo"
+      );
+    }
+  }}
+>
+
+  <input
+    type="file"
+    accept="image/*"
+    className="hidden"
+    onChange={(event) => {
+
+      const file =
+        event.target.files?.[0];
+
+      if (file) {
+
+        uploadAsset(
+          file,
+          "logo"
+        );
+      }
+    }}
+  />
+
+  {logoUrl ? (
+
+    <>
+      <Image
+        src={logoUrl}
+        alt="Logo del negocio"
+        fill
+        sizes="320px"
+        className="object-cover"
+      />
+
+      <div
+        className="
+          absolute
+          inset-0
+          flex
+          items-center
+          justify-center
+          bg-black/50
+          opacity-0
+          transition-opacity
+          hover:opacity-100
+        "
+      >
+
+        <div className="text-center text-white">
+
+          <p className="font-semibold">
+
+            Actualizar logo
+
+          </p>
+
+          <p className="text-sm">
+
+            Clic o arrastra una nueva imagen
+
+          </p>
+
+        </div>
+
+      </div>
+    </>
+
+  ) : (
+
+    <div
+      className="
+        flex
+        h-full
+        flex-col
+        items-center
+        justify-center
+        text-center
+      "
+    >
+
+      <div className="text-5xl">
+
+        🖼️
+
+      </div>
+
+      <p className="mt-4 font-semibold">
+
+        Haz clic para subir tu logo
+
+      </p>
+
+      <p className="text-sm text-slate-500">
+
+        o arrastra la imagen aquí
+
+      </p>
+
+      <p className="mt-2 text-xs text-slate-400">
+
+        PNG, JPG o WEBP · Máx. 5 MB
+
+      </p>
+
+    </div>
+
+  )}
+
+      </label>
+
+      <label
+  className="
+    relative
+    block
+    aspect-[16/9]
+    w-full
+    overflow-hidden
+    rounded-2xl
+    border-2
+    border-dashed
+    border-slate-300
+    cursor-pointer
+  "
+  onDragOver={(event)=>
+    event.preventDefault()
+  }
+  onDrop={(event)=>{
+
+    event.preventDefault();
+
+    const file =
+      event.dataTransfer.files[0];
+
+    if(file){
+
+      uploadAsset(
+        file,
+        "banner"
+      );
+    }
+  }}
+>
+
+  <input
+    type="file"
+    accept="image/*"
+    className="hidden"
+    onChange={(event)=>{
+
+      const file =
+        event.target.files?.[0];
+
+      if(file){
+
+        uploadAsset(
+          file,
+          "banner"
+        );
+      }
+    }}
+  />
+
+  {bannerUrl ? (
+
+    <>
+      <Image
+        src={bannerUrl}
+        alt="Banner principal del negocio"
+        fill
+        sizes="(max-width: 768px) 100vw, 50vw"
+        className="object-cover"
+      />
+
+      <div
+        className="
+          absolute
+          inset-0
+          flex
+          items-center
+          justify-center
+          bg-black/50
+          opacity-0
+          transition-opacity
+          hover:opacity-100
+        "
+      >
+
+        <div className="text-center text-white">
+
+          <p className="font-semibold">
+
+            Actualizar banner principal
+
+          </p>
+
+          <p className="text-sm">
+
+            Clic o arrastra una nueva imagen
+
+          </p>
+
+        </div>
+
+      </div>
+    </>
+
+  ) : (
+
+    <div
+      className="
+        flex
+        h-full
+        flex-col
+        items-center
+        justify-center
+        text-center
+      "
+    >
+
+      <div className="text-5xl">
+
+        🖼️
+
+      </div>
+
+      <p className="mt-4 font-semibold">
+
+        Haz clic para subir tu banner principal
+
+      </p>
+
+      <p className="text-sm text-slate-500">
+
+        o arrastra la imagen aquí
+
+      </p>
+
+      <p className="mt-2 text-xs text-slate-400">
+
+        PNG, JPG o WEBP · Máx. 5 MB
+
+      </p>
+
+    </div>
+
+  )}
+
+</label>
+    </div>
+
+    <label
+  className="
+    mt-6
+    flex
+    min-h-48
+    cursor-pointer
+    flex-col
+    items-center
+    justify-center
+    rounded-2xl
+    border-2
+    border-dashed
+    border-slate-300
+    text-center
+  "
+  onDragOver={(event)=>
+    event.preventDefault()
+  }
+  onDrop={(event)=>{
+
+    event.preventDefault();
+
+    [...event.dataTransfer.files]
+      .forEach((file)=>{
+
+        uploadAsset(
+          file,
+          "gallery"
+        );
+      });
+  }}
+>
+
+  <input
+    type="file"
+    multiple
+    accept="image/*"
+    className="hidden"
+    onChange={(event)=>{
+
+      const files =
+        [
+          ...(event.target.files ?? [])
+        ];
+
+      files.forEach((file)=>{
+
+        uploadAsset(
+          file,
+          "gallery"
+        );
+      });
+    }}
+  />
+
+  <div className="text-5xl">
+
+    📸
+
+  </div>
+
+  <p className="mt-4 font-semibold">
+
+    Agregar imágenes a la galería
+
+  </p>
+
+  <p className="text-sm text-slate-500">
+
+    Clic o arrastra imágenes aquí
+
+  </p>
+
+  <p className="mt-2 text-xs text-slate-400">
+
+    PNG, JPG o WEBP · Máx. 5 MB
+
+  </p>
+
+</label>
+
+    {galleryUrls.length > 0 && (
+      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {galleryUrls.map((url) => (
+          <Image
+            key={url}
+            src={url}
+            alt="Imagen de galería"
+            width={800}
+            height={600}
+            className="aspect-square w-full rounded object-cover"
+          />
+        ))}
+      </div>
+    )}
+
+  </section>
+  
   <section className="rounded-3xl border p-8">
 
     <h2 className="mb-6 text-2xl font-bold">
@@ -835,56 +1329,6 @@ const hasProfileChanges =
 
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-2xl border p-5">
-
-        <strong>
-          Historial de cambios
-        </strong>
-
-        <table className="mt-4 w-full min-w-180 text-left text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="p-2">Fecha</th>
-              <th className="p-2">Hora</th>
-              <th className="p-2">Campo</th>
-              <th className="p-2">Valor anterior</th>
-              <th className="p-2">Valor nuevo</th>
-              <th className="p-2">Usuario</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.map((row) => {
-              const date = new Date(row.createdAt);
-
-              return (
-                <tr key={row.id} className="border-b last:border-0">
-                  <td className="p-2">{date.toLocaleDateString("es-MX")}</td>
-                  <td className="p-2">
-                    {date.toLocaleTimeString("es-MX", {
-                      hour: "2-digit",
-                      minute: "2-digit"
-                    })}
-                  </td>
-                  <td className="p-2">{row.field}</td>
-                  <td className="max-w-xs truncate p-2">
-                    {row.previousValue || "Sin valor"}
-                  </td>
-                  <td className="max-w-xs truncate p-2">{row.newValue}</td>
-                  <td className="p-2">{row.user}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-
-        {history.length === 0 && (
-          <p className="mt-4 text-sm text-slate-500">
-            Sin cambios registrados.
-          </p>
-        )}
-
-      </div>
-
       {!validPhone &&
       phoneNumber && (
 
@@ -942,7 +1386,98 @@ const hasProfileChanges =
     </h2>
 
     <div className="mb-4 flex aspect-video items-center justify-center rounded-xl border bg-slate-100 text-slate-500">
-      Mapa Placeholder
+      <div
+  className="
+    text-center
+    space-y-2
+  "
+>
+
+  <div className="text-5xl">
+
+    📍
+
+  </div>
+
+  <p>
+
+    Mapa interactivo próximamente
+
+  </p>
+
+  <p
+    className="
+      text-xs
+      text-slate-500
+    "
+  >
+
+    La georreferencia del negocio
+    se utilizará para:
+
+  </p>
+
+  <ul
+    className="
+      text-xs
+      text-slate-500
+    "
+  >
+
+    <li>
+      Delivery
+    </li>
+
+    <li>
+      Negocios cercanos
+    </li>
+
+    <li>
+      Cobertura
+    </li>
+
+    <li>
+      Marketplace
+    </li>
+
+  </ul>
+
+</div>
+{
+
+  latitude && longitude && (
+
+    <div
+      className="
+        mt-4
+        rounded-lg
+        bg-slate-50
+        p-3
+        text-sm
+      "
+    >
+
+      <p>
+
+        Latitud:
+
+        {latitude}
+
+      </p>
+
+      <p>
+
+        Longitud:
+
+        {longitude}
+
+      </p>
+
+    </div>
+
+  )
+
+}
     </div>
 
     <div className="grid gap-4 md:grid-cols-2">
@@ -961,119 +1496,6 @@ const hasProfileChanges =
         onChange={(event) => setLongitude(event.target.value)}
       />
     </div>
-
-  </section>
-
-  <section className="rounded-3xl border p-8">
-
-    <h2 className="mb-6 text-2xl font-bold">
-      Branding
-    </h2>
-
-    <div className="grid gap-6 md:grid-cols-2">
-      <label
-        className="space-y-2 rounded-xl border-2 border-dashed p-4"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          const file = event.dataTransfer.files[0];
-          if (file) {
-            uploadAsset(file, "logo");
-          }
-        }}
-      >
-        <span className="font-medium">Logo</span>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              uploadAsset(file, "logo");
-            }
-          }}
-        />
-        {logoUrl && (
-            <Image
-            src={logoUrl}
-            alt="Logo del negocio"
-              width={128}
-              height={128}
-            className="h-32 w-32 rounded object-cover"
-          />
-        )}
-      </label>
-
-      <label
-        className="space-y-2 rounded-xl border-2 border-dashed p-4"
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          const file = event.dataTransfer.files[0];
-          if (file) {
-            uploadAsset(file, "banner");
-          }
-        }}
-      >
-        <span className="font-medium">Banner Principal</span>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) {
-              uploadAsset(file, "banner");
-            }
-          }}
-        />
-        {bannerUrl && (
-            <Image
-            src={bannerUrl}
-            alt="Banner del negocio"
-              width={1600}
-              height={900}
-            className="aspect-video w-full rounded object-cover"
-          />
-        )}
-      </label>
-    </div>
-
-    <label
-      className="mt-6 block space-y-2 rounded-xl border-2 border-dashed p-4"
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault();
-        [...event.dataTransfer.files].forEach((file) => {
-          uploadAsset(file, "gallery");
-        });
-      }}
-    >
-      <span className="font-medium">Galería</span>
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={(event) => {
-          const files = [...(event.target.files || [])];
-          files.forEach((file) => uploadAsset(file, "gallery"));
-        }}
-      />
-    </label>
-
-    {galleryUrls.length > 0 && (
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        {galleryUrls.map((url) => (
-          <Image
-            key={url}
-            src={url}
-            alt="Imagen de galería"
-            width={800}
-            height={600}
-            className="aspect-square w-full rounded object-cover"
-          />
-        ))}
-      </div>
-    )}
 
   </section>
 
@@ -1160,8 +1582,170 @@ const hasProfileChanges =
     </div>
 
   </section>
-
+  
   <section className="rounded-3xl border p-8">
+
+  <h2 className="mb-6 text-2xl font-bold">
+
+    Horario de Servicio
+
+  </h2>
+
+  <p className="mb-6 text-sm text-slate-500">
+
+    Este horario determinará cuándo el negocio
+    estará disponible para recibir pedidos.
+
+  </p>
+
+  <div className="space-y-4">
+
+    {schedules.map(
+      (
+        schedule,
+        index
+      ) => (
+
+        <div
+          key={schedule.day}
+          className="rounded-xl border p-4"
+        >
+
+          <div className="flex flex-wrap items-center gap-4">
+
+            <label className="flex items-center gap-2">
+
+              <input
+                type="checkbox"
+                checked={
+                  schedule.enabled
+                }
+                onChange={(e) => {
+
+                  const updated =
+                    [...schedules];
+
+                  updated[index] = {
+                    ...updated[index],
+                    enabled: e.target.checked
+                  };
+
+                  setSchedules(
+                    updated
+                  );
+                }}
+              />
+
+              <span className="font-medium">
+
+                {schedule.day}
+
+              </span>
+
+            </label>
+
+            {
+
+              schedule.enabled && (
+
+                <>
+
+                  <span>
+                    De:
+                  </span>
+
+                  <select
+                    value={
+                      schedule.openTime
+                    }
+                    onChange={(e) => {
+
+                      const updated =
+                        [...schedules];
+
+                      updated[index] = {
+                        ...updated[index],
+                        openTime: e.target.value
+                      };
+
+                      setSchedules(
+                        updated
+                      );
+                    }}
+                    className="border p-2"
+                  >
+
+                    {timeOptions.map(
+                      (time) => (
+
+                        <option
+                          key={time}
+                        >
+                          {time}
+                        </option>
+
+                      )
+                    )}
+
+                  </select>
+
+                  <span>
+                    a
+                  </span>
+
+                  <select
+                    value={
+                      schedule.closeTime
+                    }
+                    onChange={(e) => {
+
+                      const updated =
+                        [...schedules];
+
+                      updated[index] = {
+                        ...updated[index],
+                        closeTime: e.target.value
+                      };
+
+                      setSchedules(
+                        updated
+                      );
+                    }}
+                    className="border p-2"
+                  >
+
+                    {timeOptions.map(
+                      (time) => (
+
+                        <option
+                          key={time}
+                        >
+                          {time}
+                        </option>
+
+                      )
+                    )}
+
+                  </select>
+
+                </>
+
+              )
+
+            }
+
+          </div>
+
+        </div>
+
+      )
+    )}
+
+  </div>
+
+</section>
+
+<section className="rounded-3xl border p-8">
 
     <h2 className="mb-6 text-2xl font-bold">
 
@@ -1442,7 +2026,7 @@ const hasProfileChanges =
     className="ml-4 rounded bg-cancel px-6 py-3 text-white"
   >
 
-    Cancelar
+    Regresar
 
   </button>
 

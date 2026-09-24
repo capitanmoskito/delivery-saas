@@ -23,6 +23,7 @@ export default function SaaSLayout({
             <Link href="/saas/businesses">Negocios</Link>
             <Link href="/saas/plans">Planes</Link>
             <Link href="/saas/promotions">Promociones</Link>
+            <Link href="/saas/promo-codes">Códigos promocionales</Link>
             <Link href="/saas/referrals">Referidos</Link>
             <Link href="/saas/testimonials">Testimonios</Link>
             <Link href="/saas/banners">Banners</Link>

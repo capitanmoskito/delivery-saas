@@ -104,7 +104,7 @@ export default async function StorePage({
         currency={restaurant.currency}
       />
 
-      <StoreReviews reviews={topReviews} averageRating={reviewStats._avg.rating ?? 0} reviewCount={reviewStats._count.rating} />
+      <StoreReviews key={restaurant.tenantId} tenantId={restaurant.tenantId} reviews={topReviews} averageRating={reviewStats._avg.rating ?? 0} reviewCount={reviewStats._count.rating} />
     </main>
   );
 }

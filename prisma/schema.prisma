@@ -878,6 +878,12 @@ model Order {
 
   paymentMethod String @default("cash")
 
+  paymentProvider String?
+
+  externalPaymentId String?
+
+  discountCode String?
+
   customerName String?
 
   tableNumber String?
@@ -926,7 +932,77 @@ model Order {
 
   items OrderItem[]
 
+  @@index([paymentProvider, externalPaymentId])
+
   @@map("orders")
+}
+
+model PaymentProviderConfig {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  provider String
+
+  enabled Boolean @default(false)
+
+  credentialsEncrypted String
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, provider])
+  @@map("payment_provider_configs")
+}
+
+model BusinessTransferDetails {
+  id String @id @default(uuid())
+
+  tenantId String @unique
+
+  enabled Boolean @default(false)
+
+  bankName String
+
+  accountHolder String
+
+  accountNumber String?
+
+  clabe String?
+
+  instructions String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("business_transfer_details")
+}
+
+model PaymentEvent {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  orderId String
+
+  actorUserId String?
+
+  provider String?
+
+  eventType String
+
+  previousStatus String?
+
+  newStatus String
+
+  externalPaymentId String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, orderId, createdAt])
+  @@map("payment_events")
 }
 
 model OrderItem {

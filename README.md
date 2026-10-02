@@ -32,6 +32,17 @@ NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN=your_mapbox_public_token
 
 Restart `npm run dev` after changing environment variables. `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` is required by the browser map; the other tokens stay on the server.
 
+## Payment providers
+
+Before enabling Mercado Pago or Clip, set these server-only values in `.env.local` and in the production environment:
+
+```env
+PAYMENT_CREDENTIALS_ENCRYPTION_KEY=64_hexadecimal_characters
+PAYMENT_CALLBACK_BASE_URL=https://your-public-store-domain.example
+```
+
+Generate the encryption key with `openssl rand -hex 32`. Keep it stable and backed up: changing it makes credentials already stored for tenants unreadable. `PAYMENT_CALLBACK_BASE_URL` must be the public HTTPS origin used for provider return URLs and payment webhooks; local or HTTP URLs are rejected.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

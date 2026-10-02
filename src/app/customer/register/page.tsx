@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { validatePassword } from "@/src/lib/password-validator";
+import { sanitizeInput } from "@/src/lib/input-sanitizer";
+import MarketplaceHeader from "@/src/components/marketplace-header";
 
 export default function CustomerRegisterPage() {
   const router = useRouter();
@@ -76,8 +78,10 @@ export default function CustomerRegisterPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-xl p-6">
-      <h1 className="mb-6 text-3xl font-bold">Crea tu cuenta</h1>
+    <>
+      <MarketplaceHeader customerArea />
+      <div className="container mx-auto max-w-xl p-6">
+        <h1 className="mb-6 text-3xl font-bold">Crea tu cuenta</h1>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
@@ -127,7 +131,7 @@ export default function CustomerRegisterPage() {
           onChange={(e) =>
             setForm({
               ...form,
-              email: e.target.value,
+              email: sanitizeInput(e.target.value).toLowerCase(),
             })
           }
         />
@@ -137,7 +141,7 @@ export default function CustomerRegisterPage() {
           type="email"
           className="w-full border p-2"
           value={confirmEmail}
-          onChange={(e) => setConfirmEmail(e.target.value)}
+          onChange={(e) => setConfirmEmail(sanitizeInput(e.target.value).toLowerCase())}
         />
 
         {confirmEmail && !emailsMatch && (
@@ -153,7 +157,7 @@ export default function CustomerRegisterPage() {
             onChange={(e) =>
               setForm({
                 ...form,
-                password: e.target.value,
+                password: sanitizeInput(e.target.value),
               })
             }
           />
@@ -174,7 +178,7 @@ export default function CustomerRegisterPage() {
             placeholder="Repite tu contraseña"
             className="w-full border p-2 pr-10"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(e) => setConfirmPassword(sanitizeInput(e.target.value))}
           />
 
           <button
@@ -228,6 +232,7 @@ export default function CustomerRegisterPage() {
           {loading ? "Creando..." : "Crear cuenta"}
         </button>
       </form>
-    </div>
+      </div>
+    </>
   );
 }

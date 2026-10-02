@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import AddressFields, { type AddressValue } from "@/src/components/location/address-fields";
+import MarketplaceHeader from "@/src/components/marketplace-header";
 
 const emptyAddress: AddressValue = { street: "", postalCode: "", neighborhood: "", city: "", state: "", country: "México", reference: "", contactPhone: "", latitude: null, longitude: null };
 
@@ -27,8 +28,15 @@ export default function CustomerProfilePage() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  async function save() {
-    setSaving(true); setError(""); setMessage("");
+  async function save(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(""); setMessage("");
+    if (!/^\d{10}$/.test(address.contactPhone)) {
+      setError("El teléfono de contacto debe tener exactamente 10 dígitos.");
+      return;
+    }
+
+    setSaving(true);
     try {
       const response = await fetch("/api/customer/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ firstName, lastName, ...address }) });
       const data: { error?: string } = await response.json();
@@ -37,5 +45,33 @@ export default function CustomerProfilePage() {
     } catch { setError("No se pudo conectar con el servidor"); } finally { setSaving(false); }
   }
 
-  return <main className="mx-auto max-w-3xl p-6"><h1 className="text-3xl font-bold">Mi perfil</h1><div className="mt-6 space-y-4 rounded border p-5"><div className="grid gap-3 sm:grid-cols-2"><input className="border p-3" placeholder="Nombre" value={firstName} onChange={(event) => setFirstName(event.target.value)} /><input className="border p-3" placeholder="Apellido" value={lastName} onChange={(event) => setLastName(event.target.value)} /></div><input className="w-full border bg-slate-100 p-3" value={email} readOnly /><h2 className="pt-3 text-xl font-semibold">Dirección de entrega</h2><AddressFields value={address} onChange={setAddress} />{error && <p className="text-sm text-red-600">{error}</p>}{message && <p className="text-sm text-green-700">{message}</p>}<button type="button" disabled={saving} onClick={save} className="rounded bg-action px-5 py-3 text-white disabled:bg-gray-400">{saving ? "Guardando..." : "Guardar perfil"}</button></div></main>;
+  return (
+    <>
+      <MarketplaceHeader customerArea />
+      <main className="mx-auto max-w-3xl p-6">
+        <h1 className="text-3xl font-bold">Mi perfil</h1>
+        <form onSubmit={save} className="mt-6 space-y-4 rounded border p-5">
+          <p className="text-sm text-muted">Los campos marcados con * son obligatorios.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-sm font-medium">Nombre *
+              <input required className="w-full border p-3 font-normal" placeholder="Nombre" value={firstName} onChange={(event) => setFirstName(event.target.value)} />
+            </label>
+            <label className="space-y-1 text-sm font-medium">Apellido *
+              <input required className="w-full border p-3 font-normal" placeholder="Apellido" value={lastName} onChange={(event) => setLastName(event.target.value)} />
+            </label>
+          </div>
+          <label className="block space-y-1 text-sm font-medium">Correo electrónico *
+            <input required type="email" className="w-full border bg-slate-100 p-3 font-normal" value={email} readOnly />
+          </label>
+          <h2 className="pt-3 text-xl font-semibold">Dirección de entrega</h2>
+          <AddressFields value={address} onChange={setAddress} requiredFields />
+          {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+          {message && <p role="status" className="text-sm text-green-700">{message}</p>}
+          <button type="submit" disabled={saving} className="rounded bg-action px-5 py-3 text-white disabled:bg-gray-400">
+            {saving ? "Guardando..." : "Guardar perfil"}
+          </button>
+        </form>
+      </main>
+    </>
+  );
 }

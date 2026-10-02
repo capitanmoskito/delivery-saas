@@ -19,6 +19,9 @@ import {
 import PasswordConfirmModal
 from "@/src/components/settings/password-confirm-modal";
 
+import PaymentMethodsSettings
+from "@/src/components/settings/payment-methods-settings";
+
 import AddressFields
 from "@/src/components/location/address-fields";
 
@@ -1615,6 +1618,13 @@ const hasProfileChanges =
     </select>
 
   </section>
+
+  <PaymentMethodsSettings
+    onSaved={() => {
+      setSaveMessage("Métodos de pago guardados correctamente");
+      setLocked(true);
+    }}
+  />
 
   <section className="rounded-3xl border p-8">
 

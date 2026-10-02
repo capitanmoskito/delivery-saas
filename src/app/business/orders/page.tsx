@@ -11,12 +11,12 @@ type Product = { id: string; name: string; price: number; imageUrl?: string | nu
 type PackageComplement = { id: string; name: string; price: number };
 type Package = { id: string; name: string; price: number; imageUrl?: string | null; complements: PackageComplement[]; items: Array<{ productId: string; quantity: number }> };
 type Promotion = { id: string; name: string; discountType?: "percentage" | "fixed_amount" | null; discountPercent?: number | null; discountAmount?: number | null; appliesToLocalOrders: boolean; appliesToCash: boolean; appliesToCard: boolean; targetProducts: Array<{ productId: string }>; requiredProducts: Array<{ productId: string; quantity: number }> };
-type OrderStatus = "accepted" | "preparing" | "ready_pickup" | "ready_delivery" | "delivered";
-type Order = { id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
+type OrderStatus = "pending_payment" | "accepted" | "preparing" | "ready_pickup" | "ready_delivery" | "delivered";
+type Order = { id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; paymentMethod: string; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
 type DraftItem = { productId: string; name: string; quantity: number; additionIds: string[]; additions: Variant[]; total: number };
 type Closure = { orderCount: number; totalAmount: number; onlineOrderCount: number; localOrderCount: number; summary: { busiestHours: Array<{ hour: number; orderCount: number }>; starDishes: Array<{ name: string; quantity: number }>; recurringCustomers: Array<{ name: string; orders: number }> } };
 
-const statusLabels: Record<OrderStatus, string> = { accepted: "Orden aceptada", preparing: "En preparación", ready_pickup: "Lista para recoger", ready_delivery: "Lista para envío", delivered: "Entregada" };
+const statusLabels: Record<OrderStatus, string> = { pending_payment: "Pago pendiente", accepted: "Orden aceptada", preparing: "En preparación", ready_pickup: "Lista para recoger", ready_delivery: "Lista para envío", delivered: "Entregada" };
 const emptyDeliveryAddress: AddressValue = { street: "", postalCode: "", neighborhood: "", city: "", state: "", country: "México", reference: "", contactPhone: "", latitude: null, longitude: null };
 
 export default function OrdersPage() {
@@ -235,6 +235,7 @@ export default function OrdersPage() {
       {error && <p className="text-sm text-red-600">{error}</p>}<div><button type="button" onClick={createOrder} disabled={saving || (items.length === 0 && packageSelections.length === 0)} className="rounded bg-action px-4 py-2 text-white disabled:bg-gray-400">{saving ? "Guardando..." : editingOrderId ? "Guardar cambios" : "Guardar orden completa"}</button><button type="button" onClick={resetOrder} className="ml-2 rounded border px-4 py-2">Cancelar</button></div></section>}
     {error && !showForm && <p className="mt-4 text-sm text-red-600">{error}</p>}{closure && <ClosureSummary closure={closure} onClose={() => setClosure(null)} />}
     <OrdersTable title="Pedidos en línea" orders={orders.filter((order) => order.source === "online")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} /><OrdersTable title="Pedidos en local" orders={orders.filter((order) => order.source === "local")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} />
+    <PendingTransferQueue orders={orders.filter((order) => order.source === "online" && order.paymentMethod === "transfer" && order.paymentStatus === "pending")} onConfirm={(orderId) => void updateOrder(orderId, "accepted", "paid")} />
   </div>;
 }
 
@@ -243,6 +244,7 @@ function OrdersTable({ title, orders, onUpdate, onEdit, currentTime }: { title: 
 }
 
 function DeliveryDuration({ order, currentTime }: { order: Order; currentTime: number | null }) {
+  if (order.status === "pending_payment") return <span className="font-medium text-amber-700">Esperando pago</span>;
   const startAt = order.source === "online" ? order.acceptedAt || order.createdAt : order.preparingAt || order.createdAt;
   const completedAt = order.readyAt || (order.source === "local" && order.paymentStatus === "paid" ? order.paidAt : null);
   const milliseconds = Math.max(0, new Date(completedAt || currentTime || startAt).getTime() - new Date(startAt).getTime());
@@ -252,6 +254,32 @@ function DeliveryDuration({ order, currentTime }: { order: Order; currentTime: n
 
   return <span className={completedAt ? "font-medium text-slate-700" : "font-medium text-action"}>{label}{completedAt ? "" : " en curso"}</span>;
 }
+
+function PendingTransferQueue({ orders, onConfirm }: { orders: Order[]; onConfirm: (orderId: string) => void }) {
+  return (
+    <section className="mt-8">
+      <h2 className="mb-3 text-xl font-semibold">Transferencias por confirmar</h2>
+      {orders.length === 0 ? (
+        <p className="rounded border p-4 text-sm text-slate-500">No hay transferencias pendientes.</p>
+      ) : (
+        <div className="divide-y rounded border px-4">
+          {orders.map((order) => (
+            <div key={order.id} className="flex flex-col justify-between gap-3 py-4 sm:flex-row sm:items-center">
+              <div>
+                <p className="font-medium">{order.orderNumber || order.id.slice(0, 8)} · {order.customerName || "Cliente"}</p>
+                <p className="text-sm text-slate-600">Total recibido a confirmar: ${order.total.toFixed(2)}</p>
+              </div>
+              <button type="button" onClick={() => onConfirm(order.id)} className="rounded bg-action px-4 py-2 text-sm font-medium text-white">
+                Confirmar transferencia
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function OrderStatusControls({ order, onUpdate }: { order: Order; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void }) { if (order.source === "local") { return <div className="flex min-w-68 flex-wrap gap-2">{order.status === "preparing" && <motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, order.fulfillmentType === "pickup" ? "ready_pickup" : order.fulfillmentType === "delivery" ? "ready_delivery" : "delivered")} className="rounded border-action bg-action px-4 py-2 text-sm font-medium text-white">En preparación</motion.button>}{order.status === "ready_pickup" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para recoger</button>}{order.status === "ready_delivery" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para envío</button>}{order.status === "delivered" && order.paymentStatus === "pending" && <button type="button" onClick={() => onUpdate(order.id, "delivered", "paid")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Marcar pagada</button>}{order.status === "delivered" && order.paymentStatus === "paid" && <span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Entregada y pagada</span>}</div>; } const readyStatus: OrderStatus = order.fulfillmentType === "delivery" ? "ready_delivery" : "ready_pickup"; const steps: OrderStatus[] = ["accepted", "preparing", readyStatus, "delivered"]; const currentIndex = steps.indexOf(order.status); const complete = order.status === "delivered" && order.paymentStatus === "paid"; return <div className="flex min-w-68 flex-wrap gap-2">{steps.map((status, index) => <button key={status} type="button" disabled={index < currentIndex || order.status === "delivered"} onClick={() => onUpdate(order.id, status, status === "delivered" && order.fulfillmentType === "pickup" ? "paid" : undefined)} className={`rounded px-4 py-2 text-sm font-medium ${complete && status === "delivered" ? "border border-slate-300 bg-slate-200 text-slate-700" : order.status === status ? "border border-action bg-action text-white" : "border bg-white"}`}>{statusLabels[status]}</button>)}</div>; }
 function isVariant(value: unknown): value is Variant { if (!value || typeof value !== "object") { return false; } return "id" in value && "name" in value && "price" in value && typeof value.id === "string" && typeof value.name === "string" && typeof value.price === "number"; }
 function ClosureSummary({ closure, onClose }: { closure: Closure; onClose: () => void }) { return <section className="mt-6 rounded border p-4"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">Resumen de jornada</h2><button type="button" onClick={onClose} className="rounded border px-3 py-1 text-sm">Cerrar</button></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><Metric label="Pedidos" value={String(closure.orderCount)} /><Metric label="Total" value={`$${closure.totalAmount.toFixed(2)}`} /><Metric label="En línea" value={String(closure.onlineOrderCount)} /><Metric label="En local" value={String(closure.localOrderCount)} /></div><div className="mt-4 grid gap-4 md:grid-cols-3"><SummaryList title="Horas de mayor afluencia" values={closure.summary.busiestHours.map((item) => `${item.hour}:00 - ${item.orderCount} pedidos`)} /><SummaryList title="Platillos estrella" values={closure.summary.starDishes.map((item) => `${item.name} - ${item.quantity}`)} /><SummaryList title="Clientes recurrentes" values={closure.summary.recurringCustomers.map((item) => `${item.name} - ${item.orders} pedidos`)} /></div></section>; }

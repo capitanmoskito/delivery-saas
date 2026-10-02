@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/src/lib/current-user";
 import { prisma } from "@/src/lib/prisma";
 
-const orderStatuses = ["accepted", "preparing", "ready_pickup", "ready_delivery", "delivered"] as const;
+const orderStatuses = ["pending_payment", "accepted", "preparing", "ready_pickup", "ready_delivery", "delivered"] as const;
 type OrderStatus = typeof orderStatuses[number];
 
 type OrderItemInput = {
@@ -325,6 +325,21 @@ export async function PUT(request: Request) {
     }
 
     if (
+      existingOrder.source === "online" &&
+      existingOrder.status === "pending_payment" &&
+      existingOrder.paymentStatus === "pending" &&
+      status !== undefined &&
+      status !== "pending_payment" &&
+      paymentStatus !== "paid"
+    ) {
+      return NextResponse.json({ error: "Confirma el pago antes de avanzar el pedido." }, { status: 409 });
+    }
+
+    if (existingOrder.source === "online" && existingOrder.paymentProvider && paymentStatus === "paid" && existingOrder.paymentStatus !== "paid") {
+      return NextResponse.json({ error: "La tarjeta solo se confirma desde la pasarela de pago." }, { status: 403 });
+    }
+
+    if (
       existingOrder.source === "local" &&
       ((status !== undefined && status !== "preparing" && status !== "delivered" && !(existingOrder.fulfillmentType === "pickup" && status === "ready_pickup") && !(existingOrder.fulfillmentType === "delivery" && status === "ready_delivery")) ||
         (paymentStatus === "paid" && status !== "delivered" && existingOrder.status !== "delivered"))
@@ -396,16 +411,39 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: true });
     }
 
-    const result = await prisma.order.updateMany({
-      where: { id: orderId, tenantId: user.tenantId },
-      data: {
-        ...(status === undefined ? {} : { status }),
-        ...(status === "accepted" ? { acceptedAt: new Date() } : {}),
-        ...(status === "preparing" ? { preparingAt: new Date(), readyAt: null } : {}),
-        ...(status === "ready_pickup" || status === "ready_delivery" ? { readyAt: new Date() } : {}),
-        ...(paymentStatus === "paid" ? { paidAt: new Date() } : {}),
-        ...(paymentStatus === undefined ? {} : { paymentStatus })
+    const result = await prisma.$transaction(async (transaction) => {
+      const updated = await transaction.order.updateMany({
+        where: { id: orderId, tenantId: user.tenantId },
+        data: {
+          ...(status === undefined ? {} : { status }),
+          ...(status === "accepted" ? { acceptedAt: new Date() } : {}),
+          ...(status === "preparing" ? { preparingAt: new Date(), readyAt: null } : {}),
+          ...(status === "ready_pickup" || status === "ready_delivery" ? { readyAt: new Date() } : {}),
+          ...(paymentStatus === "paid" ? { paidAt: new Date() } : {}),
+          ...(paymentStatus === undefined ? {} : { paymentStatus })
+        }
+      });
+
+      if (
+        updated.count === 1 &&
+        existingOrder.source === "online" &&
+        existingOrder.paymentMethod === "transfer" &&
+        existingOrder.paymentStatus === "pending" &&
+        paymentStatus === "paid"
+      ) {
+        await transaction.paymentEvent.create({
+          data: {
+            tenantId: existingOrder.tenantId,
+            orderId: existingOrder.id,
+            actorUserId: typeof user.id === "string" ? user.id : null,
+            eventType: "transfer_payment_confirmed",
+            previousStatus: "pending",
+            newStatus: "paid",
+          },
+        });
       }
+
+      return updated;
     });
 
     if (!result.count) {

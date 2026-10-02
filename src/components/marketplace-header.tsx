@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, Store } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import LogoutButton from "@/src/components/logout-button";
@@ -9,7 +9,7 @@ import { useCartCount } from "@/src/hooks/use-cart-count";
 
 type SessionUser = { id: string; email: string; role: string } | null;
 
-export default function MarketplaceHeader() {
+export default function MarketplaceHeader({ customerArea = false }: { customerArea?: boolean }) {
   const [user, setUser] = useState<SessionUser>(null);
   const [loading, setLoading] = useState(true);
   const cartCount = useCartCount();
@@ -43,7 +43,12 @@ export default function MarketplaceHeader() {
 
         <div className="flex items-center gap-4">
           {!loading && (
-            <>
+            customerArea ? (
+              <Link href="/" className="inline-flex items-center gap-2 rounded bg-action px-4 py-2 text-sm font-medium text-white">
+                <Store size={17} /> Tienda
+              </Link>
+            ) : (
+              <>
               {isCustomer ? (
                 <>
                   <Link href="/customer/profile">Perfil</Link>
@@ -58,7 +63,8 @@ export default function MarketplaceHeader() {
                   <CartLink count={cartCount} />
                 </>
               )}
-            </>
+              </>
+            )
           )}
         </div>
       </div>

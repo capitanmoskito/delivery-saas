@@ -30,9 +30,10 @@ type AddressFieldsProps = {
   onChange: (value: AddressValue) => void;
   includeContact?: boolean;
   disabled?: boolean;
+  requiredFields?: boolean;
 };
 
-export default function AddressFields({ value, onChange, includeContact = true, disabled = false }: AddressFieldsProps) {
+export default function AddressFields({ value, onChange, includeContact = true, disabled = false, requiredFields = false }: AddressFieldsProps) {
   const [neighborhoods, setNeighborhoods] = useState<string[]>([]);
   const [locationMessage, setLocationMessage] = useState("");
 
@@ -97,19 +98,19 @@ export default function AddressFields({ value, onChange, includeContact = true, 
 
   return (
     <div className="space-y-3">
-      <input disabled={disabled} className="w-full border p-2 disabled:bg-slate-100" placeholder="Calle y número" value={value.street} onChange={(event) => update("street", event.target.value)} onBlur={() => void locateAddress()} />
+      <input disabled={disabled} required={requiredFields} className="w-full border p-2 disabled:bg-slate-100" placeholder={`Calle y número${requiredFields ? " *" : ""}`} value={value.street} onChange={(event) => update("street", event.target.value)} onBlur={() => void locateAddress()} />
       <div className="grid gap-3 sm:grid-cols-2">
-        <input disabled={disabled} className="border p-2 disabled:bg-slate-100" inputMode="numeric" maxLength={5} placeholder="Código Postal" value={value.postalCode} onChange={(event) => void lookupPostalCode(event.target.value.replace(/\D/g, ""))} />
-        <select disabled={disabled} className="border p-2 disabled:bg-slate-100" value={value.neighborhood} onChange={(event) => update("neighborhood", event.target.value)}>
-          <option value="">Colonia</option>
+        <input disabled={disabled} required={requiredFields} className="border p-2 disabled:bg-slate-100" inputMode="numeric" maxLength={5} placeholder={`Código Postal${requiredFields ? " *" : ""}`} value={value.postalCode} onChange={(event) => void lookupPostalCode(event.target.value.replace(/\D/g, ""))} />
+        <select disabled={disabled} required={requiredFields} className="border p-2 disabled:bg-slate-100" value={value.neighborhood} onChange={(event) => update("neighborhood", event.target.value)}>
+          <option value="">Colonia{requiredFields ? " *" : ""}</option>
           {(neighborhoods.includes(value.neighborhood) ? neighborhoods : [value.neighborhood, ...neighborhoods].filter(Boolean)).map((neighborhood) => <option key={neighborhood} value={neighborhood}>{neighborhood}</option>)}
         </select>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <input disabled={disabled} className="border p-2 disabled:bg-slate-100" placeholder="Municipio / ciudad" value={value.city} onChange={(event) => update("city", event.target.value)} />
-        <input disabled={disabled} className="border p-2 disabled:bg-slate-100" placeholder="Estado" value={value.state} onChange={(event) => update("state", event.target.value)} />
+        <input disabled={disabled} required={requiredFields} className="border p-2 disabled:bg-slate-100" placeholder={`Municipio / ciudad${requiredFields ? " *" : ""}`} value={value.city} onChange={(event) => update("city", event.target.value)} />
+        <input disabled={disabled} required={requiredFields} className="border p-2 disabled:bg-slate-100" placeholder={`Estado${requiredFields ? " *" : ""}`} value={value.state} onChange={(event) => update("state", event.target.value)} />
       </div>
-      {includeContact && <><input disabled={disabled} className="w-full border p-2 disabled:bg-slate-100" placeholder="Referencia de entrega" value={value.reference} onChange={(event) => update("reference", event.target.value)} /><input disabled={disabled} className="w-full border p-2 disabled:bg-slate-100" inputMode="tel" placeholder="Teléfono de contacto" value={value.contactPhone} onChange={(event) => update("contactPhone", event.target.value)} /></>}
+      {includeContact && <><input disabled={disabled} className="w-full border p-2 disabled:bg-slate-100" placeholder="Referencia de entrega" value={value.reference} onChange={(event) => update("reference", event.target.value)} /><input disabled={disabled} required={requiredFields} className="w-full border p-2 disabled:bg-slate-100" inputMode={requiredFields ? "numeric" : "tel"} maxLength={requiredFields ? 10 : undefined} placeholder={`Teléfono de contacto${requiredFields ? " *" : ""}`} value={value.contactPhone} onChange={(event) => update("contactPhone", requiredFields ? event.target.value.replace(/\D/g, "").slice(0, 10) : event.target.value)} /></>}
       <button type="button" disabled={disabled} onClick={() => void locateAddress()} className="rounded border px-3 py-2 text-sm disabled:bg-slate-100">Ubicar dirección en el mapa</button>
       {locationMessage && <p className="text-sm text-red-600">{locationMessage}</p>}
       <MapPicker latitude={value.latitude} longitude={value.longitude} disabled={disabled} onChange={(coordinates) => onChange({ ...value, ...coordinates })} />

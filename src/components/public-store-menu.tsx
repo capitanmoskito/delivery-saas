@@ -34,6 +34,7 @@ export default function PublicStoreMenu({
 }) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [additionIds, setAdditionIds] = useState<string[]>([]);
+  const [cartConflict, setCartConflict] = useState("");
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
@@ -70,22 +71,49 @@ export default function PublicStoreMenu({
   function openProduct(product: Product) {
     setSelectedProduct(product);
     setAdditionIds([]);
+    setCartConflict("");
   }
 
   function addToCart() {
     if (!selectedProduct) return;
-    const additions = selectedProduct.variants.filter((variant) => additionIds.includes(variant.id));
+    addProductToCart(selectedProduct, additionIds);
+  }
+
+  function addProductToCart(product: Product, selectedAdditionIds: string[]) {
+    const additions = product.variants.filter((variant) => selectedAdditionIds.includes(variant.id));
     const stored = window.localStorage.getItem(cartKey);
-    const cart = stored ? (JSON.parse(stored) as { restaurantId: string; lines: CartLine[] }) : { restaurantId, lines: [] };
+    const cart = stored ? (JSON.parse(stored) as { restaurantId: string; lines: CartLine[]; pendingOrderId?: string }) : { restaurantId, lines: [] };
+    if (cart.pendingOrderId) {
+      setSelectedProduct(product);
+      setAdditionIds(selectedAdditionIds);
+      setCartConflict("Ya tienes un pedido pendiente. Completa su pago antes de modificar el carrito.");
+      return;
+    }
+    if (cart.restaurantId !== restaurantId && cart.lines.length > 0) {
+      setSelectedProduct(product);
+      setAdditionIds(selectedAdditionIds);
+      setCartConflict("Tu carrito ya contiene productos de otro negocio. Finaliza ese pedido antes de pedir en otro negocio.");
+      return;
+    }
+
     const lines = cart.restaurantId === restaurantId ? cart.lines : [];
-    const existing = lines.find((line) => line.productId === selectedProduct.id && line.additionIds.join(",") === additionIds.join(","));
+    const existing = lines.find((line) => line.productId === product.id && line.additionIds.join(",") === selectedAdditionIds.join(","));
     const nextLines = existing
       ? lines.map((line) => (line === existing ? { ...line, quantity: line.quantity + 1 } : line))
-      : [...lines, { productId: selectedProduct.id, name: selectedProduct.name, price: selectedProduct.price, quantity: 1, additionIds, additions }];
+      : [...lines, { productId: product.id, name: product.name, price: product.price, quantity: 1, additionIds: selectedAdditionIds, additions }];
     window.localStorage.setItem(cartKey, JSON.stringify({ restaurantId, lines: nextLines }));
     window.dispatchEvent(new Event(cartUpdatedEvent));
     setSelectedProduct(null);
     setAdditionIds([]);
+  }
+
+  function handleProductAdd(product: Product) {
+    if (product.variants.length > 0) {
+      openProduct(product);
+      return;
+    }
+
+    addProductToCart(product, []);
   }
 
   return (
@@ -95,7 +123,7 @@ export default function PublicStoreMenu({
           <h2 className="mb-4 text-2xl font-bold text-dark">Los favoritos</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {favoriteProducts.map((product) => (
-              <ProductCard key={product.id} product={product} currency={currency} onClick={() => openProduct(product)} />
+              <ProductCard key={product.id} product={product} currency={currency} onClick={() => openProduct(product)} onAdd={() => handleProductAdd(product)} />
             ))}
           </div>
         </section>
@@ -169,7 +197,7 @@ export default function PublicStoreMenu({
               {!activeCategory && <h3 className="mb-3 text-lg font-bold text-dark">{group.categoryName}</h3>}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {group.products.map((product) => (
-                  <ProductCard key={product.id} product={product} currency={currency} onClick={() => openProduct(product)} />
+                  <ProductCard key={product.id} product={product} currency={currency} onClick={() => openProduct(product)} onAdd={() => handleProductAdd(product)} />
                 ))}
               </div>
             </div>
@@ -220,6 +248,12 @@ export default function PublicStoreMenu({
               </div>
             )}
 
+            {cartConflict && (
+              <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {cartConflict} <Link href="/cart" className="font-semibold underline">Ir al carrito</Link>
+              </p>
+            )}
+
             <button type="button" onClick={addToCart} className="mt-6 w-full rounded-full bg-action px-4 py-3 font-medium text-white">
               Agregar al carrito
             </button>
@@ -230,25 +264,24 @@ export default function PublicStoreMenu({
   );
 }
 
-function ProductCard({ product, currency, onClick }: { product: Product; currency: keyof typeof currencySymbols; onClick: () => void }) {
+function ProductCard({ product, currency, onClick, onAdd }: { product: Product; currency: keyof typeof currencySymbols; onClick: () => void; onAdd: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-white text-left shadow-sm transition-shadow hover:shadow-md"
-    >
-      <div className="relative aspect-4/3 shrink-0 bg-slate-100">
+    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-sm transition-shadow hover:shadow-md">
+      <button type="button" onClick={onClick} aria-label={`Agregar ${product.name} al carrito`} className="relative block aspect-4/3 w-full shrink-0 cursor-pointer bg-slate-100">
         {product.imageUrl ? (
           <Image src={product.imageUrl} alt={product.name} fill unoptimized className="object-cover" />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">Sin imagen</div>
+          <span className="flex h-full items-center justify-center text-sm text-slate-500">Sin imagen</span>
         )}
-      </div>
+      </button>
       <div className="flex flex-1 flex-col p-4">
         <h3 className="font-bold text-dark">{product.name}</h3>
         <p className="mt-2 line-clamp-2 min-h-10 text-sm">{product.description || "\u00A0"}</p>
         <p className="mt-auto pt-3 font-semibold text-dark">{formatPrice(product.price, currency)}</p>
+        <button type="button" onClick={onAdd} className="mt-3 w-full rounded bg-action px-4 py-2.5 text-center font-medium text-white hover:opacity-90">
+          Agregar
+        </button>
       </div>
-    </button>
+    </article>
   );
 }

@@ -75,7 +75,12 @@ export default function LoginPage() {
     "customer"
   ) {
 
-    router.push("/");
+    const callbackUrl = new URLSearchParams(window.location.search).get("callbackUrl");
+    const destination = callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//") && !callbackUrl.includes("\\")
+      ? callbackUrl
+      : "/";
+
+    router.push(destination);
 
     return;
   }

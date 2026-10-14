@@ -13,14 +13,14 @@ type MenuItem = {
 };
 
 const menuItems: MenuItem[] = [
-  { href: "/business/dashboard", label: "Dashboard" },
+  { href: "/business/dashboard", label: "Resumen" },
   { href: "/business/menu", label: "Menú" },
-  { href: "/business/customers", label: "Clientes" },
   { href: "/business/orders", label: "Pedidos" },
   { href: "/business/categories", label: "Categorías" },
   { href: "/business/products", label: "Productos" },
   { href: "/business/promotions", label: "Promociones" },
   { href: "/business/packages", label: "Paquetes" },
+  { href: "/business/billing", label: "Pagos" },
   { href: "/business/settings", label: "Configuración" }
 ];
 

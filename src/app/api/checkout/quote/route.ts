@@ -11,9 +11,12 @@ function normalizeItems(value: unknown): CheckoutItemInput[] {
     if (!candidate || typeof candidate !== "object") return [];
     const item = candidate as Record<string, unknown>;
     const productId = typeof item.productId === "string" ? item.productId : "";
+    const packageId = typeof item.packageId === "string" ? item.packageId : "";
     const quantity = Number(item.quantity);
     const additionIds = Array.isArray(item.additionIds) ? item.additionIds.filter((id): id is string => typeof id === "string") : [];
-    return productId && Number.isInteger(quantity) ? [{ productId, quantity, additionIds }] : [];
+    if (!Number.isInteger(quantity)) return [];
+    if (packageId) return [{ productId: "", packageId, quantity, additionIds }];
+    return productId ? [{ productId, quantity, additionIds }] : [];
   });
 }
 

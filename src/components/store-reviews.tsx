@@ -103,7 +103,7 @@ export default function StoreReviews({
         {count > 0 && (
           <div className="flex items-center gap-2">
             <StarRating rating={average} />
-            <span className="text-sm font-medium text-muted">
+            <span className="text-sm font-medium text-black">
               {average.toFixed(1)} · {count} {count === 1 ? "opinión" : "opiniones"}
             </span>
           </div>
@@ -112,7 +112,7 @@ export default function StoreReviews({
 
       {visibleReviews.length === 0 ? (
         <div className="rounded border border-border p-5">
-          <p className="text-sm text-muted">Este negocio aún no cuenta con reseñas. Sé el primero en calificarlo.</p>
+          <p className="text-sm text-black">Este negocio aún no cuenta con reseñas. Sé el primero en calificarlo.</p>
           {customerStatus === "guest" && (
             <Link href="/login" className="mt-4 inline-flex rounded bg-action px-4 py-2 text-sm font-medium text-white">
               Iniciar sesión
@@ -127,8 +127,8 @@ export default function StoreReviews({
                 <span className="font-semibold text-dark">{review.customerName || "Cliente"}</span>
                 <StarRating rating={review.rating} size={14} />
               </div>
-              {review.comment && <p className="mt-2 text-sm text-muted">{review.comment}</p>}
-              <p className="mt-3 text-xs text-muted">
+              {review.comment && <p className="mt-2 text-sm text-black">{review.comment}</p>}
+              <p className="mt-3 text-xs text-black">
                 {new Date(review.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}
               </p>
             </div>
@@ -162,7 +162,7 @@ export default function StoreReviews({
             maxLength={1000}
             rows={3}
             placeholder="Cuéntanos cómo fue tu experiencia (opcional)"
-            className="w-full rounded border border-border p-3"
+            className="w-full rounded border border-border p-3 text-black"
           />
           {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
           {success && <p role="status" className="text-sm text-green-700">{success}</p>}

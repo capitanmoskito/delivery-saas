@@ -4,7 +4,7 @@ import PublicStoreMenu from "@/src/components/public-store-menu";
 import MarketplaceHeader from "@/src/components/marketplace-header";
 import StoreHero from "@/src/components/store-hero";
 import StoreReviews from "@/src/components/store-reviews";
-import { isBusinessOpenNow } from "@/src/lib/business-hours";
+import { getNextOpeningLabel, isBusinessOpenNow } from "@/src/lib/business-hours";
 
 export default async function StorePage({
   params,
@@ -34,6 +34,10 @@ export default async function StorePage({
     }),
     prisma.package.findMany({
       where: { tenantId: restaurant.tenantId, active: true },
+      include: {
+        items: { include: { product: { select: { name: true } } } },
+        complements: { where: { active: true }, select: { id: true, name: true, price: true } },
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.storeReview.aggregate({
@@ -56,6 +60,7 @@ export default async function StorePage({
   ]);
 
   const isOpen = isBusinessOpenNow(profile?.schedules ?? []);
+  const nextOpening = isOpen ? null : getNextOpeningLabel(profile?.schedules ?? []);
 
   const productItems = products.map((product: (typeof products)[number]) => ({
     id: product.id,
@@ -99,9 +104,20 @@ export default async function StorePage({
       <PublicStoreMenu
         restaurantId={restaurant.id}
         products={productItems}
-        packages={packages}
+        packages={packages.map((pkg: (typeof packages)[number]) => ({
+          id: pkg.id,
+          name: pkg.name,
+          description: pkg.description,
+          price: pkg.price,
+          imageUrl: pkg.imageUrl,
+          items: pkg.items.map((item: (typeof pkg.items)[number]) => ({ name: item.product.name, quantity: item.quantity })),
+          complements: pkg.complements,
+        }))}
         favoriteProductIds={favoriteProductIds}
         currency={restaurant.currency}
+        isOpen={isOpen}
+        businessName={profile?.businessName || restaurant.name}
+        nextOpening={nextOpening}
       />
 
       <StoreReviews key={restaurant.tenantId} tenantId={restaurant.tenantId} reviews={topReviews} averageRating={reviewStats._avg.rating ?? 0} reviewCount={reviewStats._count.rating} />

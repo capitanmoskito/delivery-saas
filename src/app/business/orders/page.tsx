@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { AlertTriangle } from "lucide-react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 
 import AddressFields, { type AddressValue } from "@/src/components/location/address-fields";
 
@@ -12,7 +13,7 @@ type PackageComplement = { id: string; name: string; price: number };
 type Package = { id: string; name: string; price: number; imageUrl?: string | null; complements: PackageComplement[]; items: Array<{ productId: string; quantity: number }> };
 type Promotion = { id: string; name: string; discountType?: "percentage" | "fixed_amount" | null; discountPercent?: number | null; discountAmount?: number | null; appliesToLocalOrders: boolean; appliesToCash: boolean; appliesToCard: boolean; targetProducts: Array<{ productId: string }>; requiredProducts: Array<{ productId: string; quantity: number }> };
 type OrderStatus = "pending_payment" | "accepted" | "preparing" | "ready_pickup" | "ready_delivery" | "delivered";
-type Order = { id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; paymentMethod: string; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
+type Order = { deliveryConfirmation?: string | null; deliveredToName?: string | null; deliveryCode?: { code: string; activeCode: string | null; expiresAt: string } | null; id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; paymentMethod: string; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
 type DraftItem = { productId: string; name: string; quantity: number; additionIds: string[]; additions: Variant[]; total: number };
 type Closure = { orderCount: number; totalAmount: number; onlineOrderCount: number; localOrderCount: number; summary: { busiestHours: Array<{ hour: number; orderCount: number }>; starDishes: Array<{ name: string; quantity: number }>; recurringCustomers: Array<{ name: string; orders: number }> } };
 
@@ -24,6 +25,9 @@ export default function OrdersPage() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [codeOrderId, setCodeOrderId] = useState<string | null>(null);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const [disputeOrderId, setDisputeOrderId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState("");
@@ -186,6 +190,8 @@ export default function OrdersPage() {
     } catch { setError("No se pudo conectar con el servidor"); } finally { setSaving(false); }
   }
 
+  const codeOrder = orders.find((order) => order.id === codeOrderId && order.deliveryCode?.activeCode) ?? null;
+
   async function updateOrder(orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") {
     setError("");
     try {
@@ -193,6 +199,7 @@ export default function OrdersPage() {
       const data: { error?: string } = await response.json();
       if (!response.ok) { setError(data.error || "No se pudo actualizar el pedido"); return; }
       await loadData();
+      if (status === "ready_delivery") { setConfirmingClose(false); setCodeOrderId(orderId); }
     } catch { setError("No se pudo conectar con el servidor"); }
   }
 
@@ -234,13 +241,24 @@ export default function OrdersPage() {
       {(items.length > 0 || packageSelections.length > 0) && <div className="rounded border p-4"><h3 className="font-semibold">Productos de la orden</h3><div className="mt-3 space-y-2">{items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-start justify-between gap-3 border-b pb-2 text-sm"><div><p>{item.quantity}x {item.name}</p>{item.additions.length > 0 && <p className="text-slate-500">{item.additions.map((addition) => addition.name).join(", ")}</p>}</div><div className="flex items-center gap-3"><span>${item.total.toFixed(2)}</span><button type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="text-red-600">Quitar</button></div></div>)}</div><div className="mt-3 space-y-1 text-right"><p>Subtotal: ${formSubtotal.toFixed(2)}</p>{promotionDiscount > 0 && <p className="text-action">Promociones: -${promotionDiscount.toFixed(2)}</p>}<p className="font-semibold">Monto: ${formTotal.toFixed(2)}</p></div></div>}
       {error && <p className="text-sm text-red-600">{error}</p>}<div><button type="button" onClick={createOrder} disabled={saving || (items.length === 0 && packageSelections.length === 0)} className="rounded bg-action px-4 py-2 text-white disabled:bg-gray-400">{saving ? "Guardando..." : editingOrderId ? "Guardar cambios" : "Guardar orden completa"}</button><button type="button" onClick={resetOrder} className="ml-2 rounded border px-4 py-2">Cancelar</button></div></section>}
     {error && !showForm && <p className="mt-4 text-sm text-red-600">{error}</p>}{closure && <ClosureSummary closure={closure} onClose={() => setClosure(null)} />}
-    <OrdersTable title="Pedidos en línea" orders={orders.filter((order) => order.source === "online")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} /><OrdersTable title="Pedidos en local" orders={orders.filter((order) => order.source === "local")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} />
+    <OrdersTable title="Pedidos en línea" orders={orders.filter((order) => order.source === "online")} onDispute={setDisputeOrderId} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} /><OrdersTable title="Pedidos en local" orders={orders.filter((order) => order.source === "local")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} />
+    {codeOrder && <DeliveryCodeModal order={codeOrder} confirming={confirmingClose} onAskClose={() => setConfirmingClose(true)} onKeepOpen={() => setConfirmingClose(false)} onClose={() => { setConfirmingClose(false); setCodeOrderId(null); }} />}
+    {disputeOrderId && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl">
+          <AlertTriangle className="mx-auto text-amber-500" size={36} />
+          <p className="mt-3 font-bold text-dark">Cliente menciona que no recibió el pedido, ponte en contacto con tu repartidor para saber detalles y confirma con el cliente.</p>
+          <button type="button" onClick={() => setDisputeOrderId(null)} className="mt-5 w-full rounded-full bg-action px-4 py-2.5 font-medium text-white">Entendido</button>
+        </div>
+      </div>
+    )}
+    <DeliveryCodesPanel orders={orders.filter((order) => order.status === "ready_delivery" && order.deliveryCode?.activeCode)} />
     <PendingTransferQueue orders={orders.filter((order) => order.source === "online" && order.paymentMethod === "transfer" && order.paymentStatus === "pending")} onConfirm={(orderId) => void updateOrder(orderId, "accepted", "paid")} />
   </div>;
 }
 
-function OrdersTable({ title, orders, onUpdate, onEdit, currentTime }: { title: string; orders: Order[]; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void; onEdit: (order: Order) => void; currentTime: number | null }) {
-  return <section className="mt-8"><h2 className="mb-3 text-xl font-semibold">{title}</h2><div className="overflow-x-auto rounded border"><table className="w-full min-w-250 text-left text-sm [&_th:nth-child(5)]:w-36 [&_td:nth-child(5)]:w-36 [&_td:nth-child(5)>div]:min-w-0"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Número</th><th className="p-3">Desde</th><th className="p-3">Cliente</th><th className="p-3">Dirección / mesa</th><th className="p-2">Estatus</th><th className="p-3">Tiempo de entrega</th><th className="p-3">Monto</th></tr></thead><tbody>{orders.map((order) => <tr key={order.id} className="border-t align-top"><td className="p-3">{order.orderNumber || order.id.slice(0, 8)}</td><td className="p-3">{order.source === "online" ? "En línea" : "En local"}</td><td className="p-3">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</td><td className="p-3">{order.deliveryAddress || (order.tableNumber ? `Mesa ${order.tableNumber}` : "Para recoger")}</td><td className="w-36 p-2"><OrderStatusControls order={order} onUpdate={onUpdate} /></td><td className="p-3"><DeliveryDuration order={order} currentTime={currentTime} /></td><td className="p-3">${order.total.toFixed(2)}<br /><span className="text-xs text-slate-500">{order.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</span>{order.source === "local" && !(order.status === "delivered" && order.paymentStatus === "paid") && <button type="button" onClick={() => onEdit(order)} className="mt-3 block rounded bg-action px-4 py-2 text-sm font-medium text-white">Editar orden</button>}</td></tr>)}{orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No hay pedidos.</td></tr>}</tbody></table></div></section>;
+function OrdersTable({ title, orders, onDispute, onUpdate, onEdit, currentTime }: { title: string; orders: Order[]; onDispute?: (orderId: string) => void; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void; onEdit: (order: Order) => void; currentTime: number | null }) {
+  return <section className="mt-8"><h2 className="mb-3 text-xl font-semibold">{title}</h2><div className="overflow-x-auto rounded border"><table className="w-full min-w-250 text-left text-sm [&_th:nth-child(5)]:w-36 [&_td:nth-child(5)]:w-36 [&_td:nth-child(5)>div]:min-w-0"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Número</th><th className="p-3">Desde</th><th className="p-3">Cliente</th><th className="p-3">Dirección / mesa</th><th className="p-2">Estatus</th><th className="p-3">Tiempo de entrega</th><th className="p-3">Monto</th></tr></thead><tbody>{orders.map((order) => <Fragment key={order.id}><tr className="border-t"><td colSpan={7} className="p-0"><OrderProgressBar order={order} /></td></tr><tr className="align-top"><td className="p-3">{order.orderNumber || order.id.slice(0, 8)}{order.deliveryConfirmation === "disputed" && onDispute && <button type="button" onClick={() => onDispute(order.id)} aria-label="Cliente reporta que no recibió el pedido" className="ml-2 inline-flex align-middle text-amber-500"><AlertTriangle size={18} /></button>}</td><td className="p-3">{order.source === "online" ? "En línea" : "En local"}</td><td className="p-3">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</td><td className="p-3">{order.deliveryAddress || (order.tableNumber ? `Mesa ${order.tableNumber}` : "Para recoger")}</td><td className="w-36 p-2"><OrderStatusControls order={order} onUpdate={onUpdate} /></td><td className="p-3"><DeliveryDuration order={order} currentTime={currentTime} /></td><td className="p-3">${order.total.toFixed(2)}<br /><span className="text-xs text-slate-500">{order.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</span>{order.source === "local" && !(order.status === "delivered" && order.paymentStatus === "paid") && <button type="button" onClick={() => onEdit(order)} className="mt-3 block rounded bg-action px-4 py-2 text-sm font-medium text-white">Editar orden</button>}</td></tr></Fragment>)}{orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No hay pedidos.</td></tr>}</tbody></table></div></section>;
 }
 
 function DeliveryDuration({ order, currentTime }: { order: Order; currentTime: number | null }) {
@@ -280,7 +298,83 @@ function PendingTransferQueue({ orders, onConfirm }: { orders: Order[]; onConfir
   );
 }
 
-function OrderStatusControls({ order, onUpdate }: { order: Order; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void }) { if (order.source === "local") { return <div className="flex min-w-68 flex-wrap gap-2">{order.status === "preparing" && <motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, order.fulfillmentType === "pickup" ? "ready_pickup" : order.fulfillmentType === "delivery" ? "ready_delivery" : "delivered")} className="rounded border-action bg-action px-4 py-2 text-sm font-medium text-white">En preparación</motion.button>}{order.status === "ready_pickup" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para recoger</button>}{order.status === "ready_delivery" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para envío</button>}{order.status === "delivered" && order.paymentStatus === "pending" && <button type="button" onClick={() => onUpdate(order.id, "delivered", "paid")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Marcar pagada</button>}{order.status === "delivered" && order.paymentStatus === "paid" && <span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Entregada y pagada</span>}</div>; } const readyStatus: OrderStatus = order.fulfillmentType === "delivery" ? "ready_delivery" : "ready_pickup"; const steps: OrderStatus[] = ["accepted", "preparing", readyStatus, "delivered"]; const currentIndex = steps.indexOf(order.status); const complete = order.status === "delivered" && order.paymentStatus === "paid"; return <div className="flex min-w-68 flex-wrap gap-2">{steps.map((status, index) => <button key={status} type="button" disabled={index < currentIndex || order.status === "delivered"} onClick={() => onUpdate(order.id, status, status === "delivered" && order.fulfillmentType === "pickup" ? "paid" : undefined)} className={`rounded px-4 py-2 text-sm font-medium ${complete && status === "delivered" ? "border border-slate-300 bg-slate-200 text-slate-700" : order.status === status ? "border border-action bg-action text-white" : "border bg-white"}`}>{statusLabels[status]}</button>)}</div>; }
+function OrderStatusControls({ order, onUpdate }: { order: Order; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void }) { if (order.source === "local") { return <div className="flex min-w-68 flex-wrap gap-2">{order.status === "preparing" && <motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, order.fulfillmentType === "pickup" ? "ready_pickup" : order.fulfillmentType === "delivery" ? "ready_delivery" : "delivered")} className="rounded border-action bg-action px-4 py-2 text-sm font-medium text-white">En preparación</motion.button>}{order.status === "ready_pickup" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para recoger</button>}{order.status === "ready_delivery" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para envío</button>}{order.status === "delivered" && order.paymentStatus === "pending" && <button type="button" onClick={() => onUpdate(order.id, "delivered", "paid")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Marcar pagada</button>}{order.status === "delivered" && order.paymentStatus === "paid" && <span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Entregada y pagada</span>}</div>; } if (order.status === "pending_payment" && order.paymentMethod === "transfer") { return <div className="flex min-w-68 flex-wrap gap-2"><ShineButton onClick={() => onUpdate(order.id, "accepted", "paid")}>Confirmar transferencia</ShineButton></div>; } const readyStatus: OrderStatus = order.fulfillmentType === "delivery" ? "ready_delivery" : "ready_pickup"; const steps: OrderStatus[] = ["accepted", "preparing", readyStatus, "delivered"]; const currentIndex = steps.indexOf(order.status); if (order.status === "delivered") { return <div className="flex min-w-68 flex-wrap gap-2"><span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">{statusLabels.delivered}</span></div>; } const next = steps[currentIndex + 1]; if (currentIndex < 0 || !next) { return <span className="text-sm text-slate-500">{statusLabels[order.status]}</span>; } return <div className="flex min-w-68 flex-wrap gap-2"><motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, next, next === "delivered" && order.fulfillmentType === "pickup" ? "paid" : undefined)} className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-white">{statusLabels[order.status]}</motion.button></div>; }
+function DeliveryCodeModal({ order, confirming, onAskClose, onKeepOpen, onClose }: { order: Order; confirming: boolean; onAskClose: () => void; onKeepOpen: () => void; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div role="dialog" aria-modal="true" aria-label="Código de envío" className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl">
+        <p className="text-sm text-slate-600">Código de envío · {order.orderNumber || order.id.slice(0, 8)}</p>
+        <p className="mt-3 text-5xl font-bold tracking-[0.3em] text-dark">{order.deliveryCode?.activeCode}</p>
+        <p className="mt-3 text-sm text-slate-600">Comparte este código con tu repartidor para que vea el pedido en <span className="font-medium">/delivery</span>.</p>
+        {confirming ? (
+          <div className="mt-5">
+            <p className="font-semibold text-dark">¿Tu repartidor ya cuenta con el pedido?</p>
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={onClose} className="flex-1 rounded-full bg-action px-4 py-2.5 font-medium text-white">Sí, cerrar</button>
+              <button type="button" onClick={onKeepOpen} className="flex-1 rounded-full border border-border px-4 py-2.5 font-medium text-dark">No</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={onAskClose} className="mt-5 w-full rounded-full bg-action px-4 py-2.5 font-medium text-white">Cerrar</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DeliveryCodesPanel({ orders }: { orders: Order[] }) {
+  return (
+    <section className="mt-8">
+      <h2 className="mb-1 text-xl font-semibold">Códigos de envío</h2>
+      <p className="mb-3 text-sm text-slate-500">Comparte el código con tu repartidor; lo ingresa en <span className="font-medium">/delivery</span> para ver el pedido y su ruta.</p>
+      {orders.length === 0 ? (
+        <p className="rounded border p-4 text-sm text-slate-500">No hay códigos activos. Se genera uno al marcar un pedido como «Lista para envío».</p>
+      ) : (
+        <div className="divide-y rounded border px-4">
+          {orders.map((order) => (
+            <div key={order.id} className="flex items-center justify-between gap-3 py-3">
+              <div>
+                <p className="font-medium">{order.orderNumber || order.id.slice(0, 8)} · {order.customerName || "Cliente"}</p>
+                <p className="text-sm text-slate-600">{order.deliveryAddress || "Sin dirección"}</p>
+                <p className="text-xs text-slate-500">Vence {new Date(order.deliveryCode?.expiresAt ?? "").toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</p>
+              </div>
+              <span className="rounded-xl bg-dark px-4 py-2 text-2xl font-bold tracking-widest text-white">{order.deliveryCode?.activeCode}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ShineButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="relative overflow-hidden rounded bg-action px-4 py-2 text-sm font-medium text-white">
+      {children}
+      <motion.span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 -skew-x-12 bg-white/40"
+        animate={{ left: ["-50%", "150%"] }}
+        transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 1, ease: "easeInOut" }}
+      />
+    </button>
+  );
+}
+
+function OrderProgressBar({ order }: { order: Order }) {
+  const readyStatus: OrderStatus = order.fulfillmentType === "delivery" ? "ready_delivery" : "ready_pickup";
+  const steps: OrderStatus[] = order.source === "local"
+    ? ["preparing", readyStatus, "delivered"]
+    : ["pending_payment", "accepted", "preparing", readyStatus, "delivered"];
+  const index = Math.max(0, steps.indexOf(order.status));
+  const percent = steps.length === 1 ? 100 : Math.round(10 + (index * 90) / (steps.length - 1));
+  return (
+    <div className="h-1 w-full bg-slate-100" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
+      <div className={`h-full transition-all duration-500 ${percent === 100 ? "bg-slate-400" : "bg-action"}`} style={{ width: `${percent}%` }} />
+    </div>
+  );
+}
+
 function isVariant(value: unknown): value is Variant { if (!value || typeof value !== "object") { return false; } return "id" in value && "name" in value && "price" in value && typeof value.id === "string" && typeof value.name === "string" && typeof value.price === "number"; }
 function ClosureSummary({ closure, onClose }: { closure: Closure; onClose: () => void }) { return <section className="mt-6 rounded border p-4"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">Resumen de jornada</h2><button type="button" onClick={onClose} className="rounded border px-3 py-1 text-sm">Cerrar</button></div><div className="mt-4 grid gap-3 sm:grid-cols-4"><Metric label="Pedidos" value={String(closure.orderCount)} /><Metric label="Total" value={`$${closure.totalAmount.toFixed(2)}`} /><Metric label="En línea" value={String(closure.onlineOrderCount)} /><Metric label="En local" value={String(closure.localOrderCount)} /></div><div className="mt-4 grid gap-4 md:grid-cols-3"><SummaryList title="Horas de mayor afluencia" values={closure.summary.busiestHours.map((item) => `${item.hour}:00 - ${item.orderCount} pedidos`)} /><SummaryList title="Platillos estrella" values={closure.summary.starDishes.map((item) => `${item.name} - ${item.quantity}`)} /><SummaryList title="Clientes recurrentes" values={closure.summary.recurringCustomers.map((item) => `${item.name} - ${item.orders} pedidos`)} /></div></section>; }
 function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded border p-3"><p className="text-sm text-slate-500">{label}</p><p className="font-semibold">{value}</p></div>; }

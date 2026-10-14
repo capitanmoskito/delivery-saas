@@ -6,14 +6,12 @@ import { useMemo, useState } from "react";
 
 import { Input } from "@/src/components/ui/input";
 import { currencySymbols } from "@/src/lib/currency";
-import { cartUpdatedEvent } from "@/src/hooks/use-cart-count";
+import { addLineToCart } from "@/src/lib/cart";
 
 type Variant = { id: string; name: string; price: number };
 type Product = { id: string; name: string; description?: string | null; price: number; imageUrl?: string | null; categoryId: string; categoryName: string; variants: Variant[] };
-type Package = { id: string; name: string; description?: string | null; price: number; imageUrl?: string | null };
-type CartLine = { productId: string; name: string; price: number; quantity: number; additionIds: string[]; additions: Variant[] };
-
-const cartKey = "tupedidos_cart";
+type PackageComplement = { id: string; name: string; price: number };
+type Package = { id: string; name: string; description?: string | null; price: number; imageUrl?: string | null; items: Array<{ name: string; quantity: number }>; complements: PackageComplement[] };
 
 function formatPrice(price: number, currency: keyof typeof currencySymbols) {
   return `${currencySymbols[currency] ?? "$"}${price.toFixed(2)}`;
@@ -25,13 +23,23 @@ export default function PublicStoreMenu({
   packages,
   favoriteProductIds,
   currency = "MXN",
+  isOpen = true,
+  businessName,
+  nextOpening = null,
 }: {
   restaurantId: string;
   products: Product[];
   packages: Package[];
   favoriteProductIds: string[];
   currency?: keyof typeof currencySymbols;
+  isOpen?: boolean;
+  businessName: string;
+  nextOpening?: string | null;
 }) {
+  const [closedModalOpen, setClosedModalOpen] = useState(false);
+  const [packageConflict, setPackageConflict] = useState("");
+  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
+  const [complementIds, setComplementIds] = useState<string[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [additionIds, setAdditionIds] = useState<string[]>([]);
   const [cartConflict, setCartConflict] = useState("");
@@ -69,6 +77,10 @@ export default function PublicStoreMenu({
   }, [filteredProducts]);
 
   function openProduct(product: Product) {
+    if (!isOpen) {
+      setClosedModalOpen(true);
+      return;
+    }
     setSelectedProduct(product);
     setAdditionIds([]);
     setCartConflict("");
@@ -80,31 +92,47 @@ export default function PublicStoreMenu({
   }
 
   function addProductToCart(product: Product, selectedAdditionIds: string[]) {
+    if (!isOpen) {
+      setSelectedProduct(null);
+      setClosedModalOpen(true);
+      return;
+    }
     const additions = product.variants.filter((variant) => selectedAdditionIds.includes(variant.id));
-    const stored = window.localStorage.getItem(cartKey);
-    const cart = stored ? (JSON.parse(stored) as { restaurantId: string; lines: CartLine[]; pendingOrderId?: string }) : { restaurantId, lines: [] };
-    if (cart.pendingOrderId) {
+    const error = addLineToCart(restaurantId, { productId: product.id, name: product.name, price: product.price, quantity: 1, additionIds: selectedAdditionIds, additions });
+    if (error) {
       setSelectedProduct(product);
       setAdditionIds(selectedAdditionIds);
-      setCartConflict("Ya tienes un pedido pendiente. Completa su pago antes de modificar el carrito.");
+      setCartConflict(error);
       return;
     }
-    if (cart.restaurantId !== restaurantId && cart.lines.length > 0) {
-      setSelectedProduct(product);
-      setAdditionIds(selectedAdditionIds);
-      setCartConflict("Tu carrito ya contiene productos de otro negocio. Finaliza ese pedido antes de pedir en otro negocio.");
-      return;
-    }
-
-    const lines = cart.restaurantId === restaurantId ? cart.lines : [];
-    const existing = lines.find((line) => line.productId === product.id && line.additionIds.join(",") === selectedAdditionIds.join(","));
-    const nextLines = existing
-      ? lines.map((line) => (line === existing ? { ...line, quantity: line.quantity + 1 } : line))
-      : [...lines, { productId: product.id, name: product.name, price: product.price, quantity: 1, additionIds: selectedAdditionIds, additions }];
-    window.localStorage.setItem(cartKey, JSON.stringify({ restaurantId, lines: nextLines }));
-    window.dispatchEvent(new Event(cartUpdatedEvent));
     setSelectedProduct(null);
     setAdditionIds([]);
+  }
+
+  function openPackage(pkg: Package) {
+    if (!isOpen) {
+      setClosedModalOpen(true);
+      return;
+    }
+    setSelectedPackage(pkg);
+    setComplementIds([]);
+    setPackageConflict("");
+  }
+
+  function addPackageToCart(pkg: Package, selectedComplementIds: string[]) {
+    if (!isOpen) {
+      setSelectedPackage(null);
+      setClosedModalOpen(true);
+      return;
+    }
+    const complements = pkg.complements.filter((complement) => selectedComplementIds.includes(complement.id));
+    const error = addLineToCart(restaurantId, { productId: "", packageId: pkg.id, name: pkg.name, price: pkg.price, quantity: 1, additionIds: selectedComplementIds, additions: complements });
+    if (error) {
+      setPackageConflict(error);
+      return;
+    }
+    setSelectedPackage(null);
+    setComplementIds([]);
   }
 
   function handleProductAdd(product: Product) {
@@ -123,7 +151,7 @@ export default function PublicStoreMenu({
           <h2 className="mb-4 text-2xl font-bold text-dark">Los favoritos</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {favoriteProducts.map((product) => (
-              <ProductCard key={product.id} product={product} currency={currency} onClick={() => openProduct(product)} onAdd={() => handleProductAdd(product)} />
+              <ProductCard key={product.id} product={product} currency={currency} closed={!isOpen} onClick={() => openProduct(product)} onAdd={() => handleProductAdd(product)} />
             ))}
           </div>
         </section>
@@ -134,20 +162,7 @@ export default function PublicStoreMenu({
           <h2 className="mb-4 text-2xl font-bold text-dark">Paquetes</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {packages.map((pkg) => (
-              <div key={pkg.id} className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
-                <div className="relative aspect-4/3 shrink-0 bg-slate-100">
-                  {pkg.imageUrl ? (
-                    <Image src={pkg.imageUrl} alt={pkg.name} fill unoptimized className="object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-sm text-slate-500">Sin imagen</div>
-                  )}
-                </div>
-                <div className="flex flex-1 flex-col p-4">
-                  <h3 className="font-bold text-dark">{pkg.name}</h3>
-                  <p className="mt-1 line-clamp-2 min-h-10 text-sm">{pkg.description || "\u00A0"}</p>
-                  <p className="mt-auto pt-3 font-semibold text-dark">{formatPrice(pkg.price, currency)}</p>
-                </div>
-              </div>
+              <PackageCard key={pkg.id} pkg={pkg} currency={currency} closed={!isOpen} onClick={() => openPackage(pkg)} onAdd={() => openPackage(pkg)} />
             ))}
           </div>
         </section>
@@ -197,7 +212,7 @@ export default function PublicStoreMenu({
               {!activeCategory && <h3 className="mb-3 text-lg font-bold text-dark">{group.categoryName}</h3>}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {group.products.map((product) => (
-                  <ProductCard key={product.id} product={product} currency={currency} onClick={() => openProduct(product)} onAdd={() => handleProductAdd(product)} />
+                  <ProductCard key={product.id} product={product} currency={currency} closed={!isOpen} onClick={() => openProduct(product)} onAdd={() => handleProductAdd(product)} />
                 ))}
               </div>
             </div>
@@ -208,6 +223,77 @@ export default function PublicStoreMenu({
       <Link href="/cart" className="fixed right-5 bottom-5 rounded-full bg-action px-5 py-3 font-medium text-white shadow-lg">
         Ver carrito
       </Link>
+
+      {closedModalOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/40 p-4">
+          <div role="dialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl">
+            <p className="text-lg font-bold text-dark">
+              {nextOpening
+                ? `¡Ups! por ahora ${businessName} se encuentra cerrado, te esperamos ${nextOpening.includes(" a las ") ? nextOpening : `a las ${nextOpening}`} para atenderte con gusto.`
+                : `¡Ups! por ahora ${businessName} se encuentra cerrado, vuelve pronto para atenderte con gusto.`}
+            </p>
+            <button type="button" onClick={() => setClosedModalOpen(false)} className="mt-5 w-full rounded-full bg-action px-4 py-3 font-medium text-white">
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedPackage && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40 sm:items-center sm:justify-center">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-dark">{selectedPackage.name}</h2>
+                <p className="mt-1 text-slate-600">{formatPrice(selectedPackage.price, currency)}</p>
+              </div>
+              <button type="button" onClick={() => setSelectedPackage(null)} className="text-slate-500">
+                Cerrar
+              </button>
+            </div>
+
+            {selectedPackage.items.length > 0 && (
+              <p className="mt-3 text-sm text-slate-600">Incluye: {selectedPackage.items.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</p>
+            )}
+
+            {selectedPackage.complements.length > 0 && (
+              <div className="mt-5">
+                <p className="font-medium">Complementos</p>
+                <div className="mt-2 space-y-2">
+                  {selectedPackage.complements.map((complement) => (
+                    <label key={complement.id} className="flex items-center justify-between rounded border p-3">
+                      <span>
+                        <input
+                          type="checkbox"
+                          className="mr-2"
+                          checked={complementIds.includes(complement.id)}
+                          onChange={(event) =>
+                            setComplementIds((current) =>
+                              event.target.checked ? [...current, complement.id] : current.filter((id) => id !== complement.id)
+                            )
+                          }
+                        />
+                        {complement.name}
+                      </span>
+                      <span>+{formatPrice(complement.price, currency)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {packageConflict && (
+              <p role="alert" className="mt-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {packageConflict} <Link href="/cart" className="font-semibold underline">Ir al carrito</Link>
+              </p>
+            )}
+
+            <button type="button" onClick={() => addPackageToCart(selectedPackage, complementIds)} className="mt-6 w-full rounded-full bg-action px-4 py-3 font-medium text-white">
+              Agregar al carrito
+            </button>
+          </div>
+        </div>
+      )}
 
       {selectedProduct && (
         <div className="fixed inset-0 z-50 flex items-end bg-black/40 sm:items-center sm:justify-center">
@@ -264,7 +350,7 @@ export default function PublicStoreMenu({
   );
 }
 
-function ProductCard({ product, currency, onClick, onAdd }: { product: Product; currency: keyof typeof currencySymbols; onClick: () => void; onAdd: () => void }) {
+function ProductCard({ product, currency, closed, onClick, onAdd }: { product: Product; closed: boolean; currency: keyof typeof currencySymbols; onClick: () => void; onAdd: () => void }) {
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-sm transition-shadow hover:shadow-md">
       <button type="button" onClick={onClick} aria-label={`Agregar ${product.name} al carrito`} className="relative block aspect-4/3 w-full shrink-0 cursor-pointer bg-slate-100">
@@ -278,8 +364,29 @@ function ProductCard({ product, currency, onClick, onAdd }: { product: Product; 
         <h3 className="font-bold text-dark">{product.name}</h3>
         <p className="mt-2 line-clamp-2 min-h-10 text-sm">{product.description || "\u00A0"}</p>
         <p className="mt-auto pt-3 font-semibold text-dark">{formatPrice(product.price, currency)}</p>
-        <button type="button" onClick={onAdd} className="mt-3 w-full rounded bg-action px-4 py-2.5 text-center font-medium text-white hover:opacity-90">
-          Agregar
+        <button type="button" onClick={onAdd} className={`mt-3 w-full rounded px-4 py-2.5 text-center font-medium text-white ${closed ? "bg-slate-400" : "bg-action hover:opacity-90"}`}>
+          {closed ? "Cerrado" : "Agregar"}
+        </button>
+      </div>
+    </article>
+  );
+}
+function PackageCard({ pkg, currency, closed, onClick, onAdd }: { pkg: Package; currency: keyof typeof currencySymbols; closed: boolean; onClick: () => void; onAdd: () => void }) {
+  return (
+    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-sm transition-shadow hover:shadow-md">
+      <button type="button" onClick={onClick} aria-label={`Agregar ${pkg.name} al carrito`} className="relative block aspect-4/3 w-full shrink-0 cursor-pointer bg-slate-100">
+        {pkg.imageUrl ? (
+          <Image src={pkg.imageUrl} alt={pkg.name} fill unoptimized className="object-cover" />
+        ) : (
+          <span className="flex h-full items-center justify-center text-sm text-slate-500">Sin imagen</span>
+        )}
+      </button>
+      <div className="flex flex-1 flex-col p-4">
+        <h3 className="font-bold text-dark">{pkg.name}</h3>
+        <p className="mt-2 line-clamp-2 min-h-10 text-sm">{pkg.description || "\u00A0"}</p>
+        <p className="mt-auto pt-3 font-semibold text-dark">{formatPrice(pkg.price, currency)}</p>
+        <button type="button" onClick={onAdd} className={`mt-3 w-full rounded px-4 py-2.5 text-center font-medium text-white ${closed ? "bg-slate-400" : "bg-action hover:opacity-90"}`}>
+          {closed ? "Cerrado" : "Agregar"}
         </button>
       </div>
     </article>

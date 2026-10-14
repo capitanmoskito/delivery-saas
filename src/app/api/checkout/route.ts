@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/src/lib/current-user";
 import { decryptPaymentCredentials } from "@/src/lib/payment-credentials";
+import { isBusinessOpenNow } from "@/src/lib/business-hours";
 import { prisma } from "@/src/lib/prisma";
 import { buildCheckoutQuote, CheckoutQuoteError, type CheckoutItemInput } from "@/src/modules/payments/checkout-quote";
 import { createPaymentProvider, type PaymentProviderName } from "@/src/modules/payments/payment-provider.factory";
@@ -14,9 +15,12 @@ function normalizeItems(value: unknown): CheckoutItemInput[] {
     if (!candidate || typeof candidate !== "object") return [];
     const item = candidate as Record<string, unknown>;
     const productId = typeof item.productId === "string" ? item.productId : "";
+    const packageId = typeof item.packageId === "string" ? item.packageId : "";
     const quantity = Number(item.quantity);
     const additionIds = Array.isArray(item.additionIds) ? item.additionIds.filter((id): id is string => typeof id === "string") : [];
-    return productId && Number.isInteger(quantity) ? [{ productId, quantity, additionIds }] : [];
+    if (!Number.isInteger(quantity)) return [];
+    if (packageId) return [{ productId: "", packageId, quantity, additionIds }];
+    return productId ? [{ productId, quantity, additionIds }] : [];
   });
 }
 
@@ -37,6 +41,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Selecciona una pasarela de tarjeta disponible." }, { status: 400 });
     }
     const providerName = paymentMethod === "card" ? requestedProvider as PaymentProviderName : null;
+    const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { tenantId: true } });
+    if (restaurant) {
+      const schedules = await prisma.businessSchedule.findMany({ where: { tenantId: restaurant.tenantId } });
+      if (!isBusinessOpenNow(schedules)) {
+        return NextResponse.json({ error: "El negocio se encuentra cerrado en este momento." }, { status: 409 });
+      }
+    }
     const quote = await buildCheckoutQuote({
       restaurantId,
       items,
@@ -111,7 +122,7 @@ export async function POST(request: Request) {
           subtotal: quote.subtotal,
           discountTotal: quote.discountTotal,
           total: quote.total,
-          items: { create: quote.items.map((item) => ({ productId: item.productId, quantity: item.quantity, unitPrice: item.unitPrice, totalPrice: item.totalPrice, additions: item.additions })) },
+          items: { create: quote.orderItems },
         },
         select: { id: true, orderNumber: true, total: true, paymentStatus: true },
       });

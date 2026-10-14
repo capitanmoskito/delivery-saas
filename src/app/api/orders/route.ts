@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { startOfDay, toDateKey } from "@/src/lib/business-time";
 import { getCurrentUser } from "@/src/lib/current-user";
 import { prisma } from "@/src/lib/prisma";
+import { ensureDeliveryCode, releaseDeliveryCode } from "@/src/modules/delivery/delivery-code";
 
 const orderStatuses = ["pending_payment", "accepted", "preparing", "ready_pickup", "ready_delivery", "delivered"] as const;
 type OrderStatus = typeof orderStatuses[number];
@@ -32,11 +34,20 @@ export async function GET() {
       return NextResponse.json({ error: "Sesión no válida" }, { status: 401 });
     }
 
+    // Only today's orders (plus unfinished ones from the last 24h); history lives in the Resumen section.
+    const dayStart = startOfDay(toDateKey(new Date()));
     const orders = await prisma.order.findMany({
-      where: { tenantId: user.tenantId },
+      where: {
+        tenantId: user.tenantId,
+        OR: [
+          { createdAt: { gte: dayStart } },
+          { createdAt: { gte: new Date(dayStart.getTime() - 86_400_000) }, status: { not: "delivered" } }
+        ]
+      },
       include: {
         customer: true,
-        items: { include: { product: true } }
+        items: { include: { product: true } },
+        deliveryCode: { select: { code: true, activeCode: true, expiresAt: true } }
       },
       orderBy: { createdAt: "desc" }
     });
@@ -423,6 +434,13 @@ export async function PUT(request: Request) {
           ...(paymentStatus === undefined ? {} : { paymentStatus })
         }
       });
+
+      if (updated.count === 1 && status === "ready_delivery" && existingOrder.fulfillmentType === "delivery") {
+        await ensureDeliveryCode(transaction, { id: existingOrder.id, tenantId: existingOrder.tenantId });
+      }
+      if (updated.count === 1 && status === "delivered") {
+        await releaseDeliveryCode(transaction, existingOrder.id);
+      }
 
       if (
         updated.count === 1 &&

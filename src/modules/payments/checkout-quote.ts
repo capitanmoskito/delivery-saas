@@ -3,12 +3,22 @@ import { decryptPaymentCredentials } from "@/src/lib/payment-credentials";
 
 export type CheckoutItemInput = {
   productId: string;
+  packageId?: string;
   quantity: number;
   additionIds: string[];
 };
 
+export type CheckoutOrderItem = {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  additions: Array<{ id: string; name: string; price: number }>;
+};
+
 export type CheckoutLineSnapshot = {
   productId: string;
+  packageId?: string;
   name: string;
   quantity: number;
   unitPrice: number;
@@ -23,6 +33,7 @@ export type CheckoutQuote = {
   businessName: string;
   currency: string;
   items: CheckoutLineSnapshot[];
+  orderItems: CheckoutOrderItem[];
   subtotal: number;
   discountTotal: number;
   total: number;
@@ -68,7 +79,22 @@ export async function buildCheckoutQuote({
   });
   if (!restaurant || !restaurant.active) throw new CheckoutQuoteError("El negocio no está disponible.", 404);
 
-  const uniqueProductIds = [...new Set(items.map((item) => item.productId))];
+  const productItems = items.filter((item) => !item.packageId);
+  const packageItems = items.filter((item) => item.packageId);
+  const uniquePackageIds = [...new Set(packageItems.map((item) => item.packageId as string))];
+  const packages = uniquePackageIds.length > 0
+    ? await prisma.package.findMany({
+        where: { tenantId: restaurant.tenantId, active: true, id: { in: uniquePackageIds } },
+        include: {
+          items: { include: { product: { select: { id: true, name: true, price: true, active: true } } } },
+          complements: { where: { active: true }, select: { id: true, name: true, price: true } },
+        },
+      })
+    : [];
+  const packagesById = new Map(packages.map((pkg) => [pkg.id, pkg]));
+  if (packagesById.size !== uniquePackageIds.length) throw new CheckoutQuoteError("Uno o más paquetes ya no están disponibles.");
+
+  const uniqueProductIds = [...new Set(productItems.map((item) => item.productId))];
   const products = await prisma.product.findMany({
     where: { tenantId: restaurant.tenantId, active: true, id: { in: uniqueProductIds } },
     include: { variants: { where: { active: true }, select: { id: true, name: true, price: true } } },
@@ -78,7 +104,44 @@ export async function buildCheckoutQuote({
 
   const quantities = new Map<string, number>();
   const itemSubtotals = new Map<string, number>();
+  const orderItems: CheckoutOrderItem[] = [];
   const lineSnapshots: CheckoutLineSnapshot[] = items.map((item) => {
+    if (item.packageId) {
+      if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
+        throw new CheckoutQuoteError("Una cantidad del carrito no es válida.");
+      }
+      const pkg = packagesById.get(item.packageId);
+      if (!pkg || pkg.items.length === 0 || pkg.items.some((packageItem) => !packageItem.product.active)) {
+        throw new CheckoutQuoteError("Uno o más paquetes ya no están disponibles.");
+      }
+      const regularTotal = pkg.items.reduce((sum, packageItem) => sum + packageItem.product.price * packageItem.quantity, 0);
+      const unitsTotal = pkg.items.reduce((sum, packageItem) => sum + packageItem.quantity, 0);
+      const complementIds = [...new Set(item.additionIds)];
+      const complements = complementIds.map((id) => pkg.complements.find((complement) => complement.id === id)).filter((complement) => complement !== undefined);
+      if (complements.length !== complementIds.length) throw new CheckoutQuoteError(`Los complementos de ${pkg.name} ya no están disponibles.`);
+      const unitPackagePrice = roundMoney(pkg.price + complements.reduce((sum, complement) => sum + complement.price, 0));
+      const complementSnapshots = complements.map((complement) => ({ id: complement.id, name: complement.name, price: complement.price }));
+      const packageTotal = roundMoney(unitPackagePrice * item.quantity);
+      let allocated = 0;
+      pkg.items.forEach((packageItem, index) => {
+        const isLast = index === pkg.items.length - 1;
+        const share = regularTotal > 0 ? (packageItem.product.price * packageItem.quantity) / regularTotal : packageItem.quantity / unitsTotal;
+        const totalPrice = isLast ? roundMoney(packageTotal - allocated) : roundMoney(packageTotal * share);
+        allocated += totalPrice;
+        const quantity = packageItem.quantity * item.quantity;
+        orderItems.push({ productId: packageItem.productId, quantity, unitPrice: roundMoney(totalPrice / quantity), totalPrice, additions: index === 0 ? complementSnapshots : [] });
+      });
+      return {
+        productId: "",
+        packageId: pkg.id,
+        name: pkg.name,
+        quantity: item.quantity,
+        unitPrice: unitPackagePrice,
+        totalPrice: packageTotal,
+        additionIds: complementIds,
+        additions: complementSnapshots,
+      };
+    }
     if (!item.productId || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
       throw new CheckoutQuoteError("Una cantidad del carrito no es válida.");
     }
@@ -93,6 +156,13 @@ export async function buildCheckoutQuote({
     const totalPrice = roundMoney(unitPrice * item.quantity);
     quantities.set(product.id, (quantities.get(product.id) || 0) + item.quantity);
     itemSubtotals.set(product.id, (itemSubtotals.get(product.id) || 0) + totalPrice);
+    orderItems.push({
+      productId: product.id,
+      quantity: item.quantity,
+      unitPrice,
+      totalPrice,
+      additions: additions.map((addition) => ({ id: addition.id, name: addition.name, price: addition.price })),
+    });
     return {
       productId: product.id,
       name: product.name,
@@ -186,6 +256,7 @@ export async function buildCheckoutQuote({
     businessName: restaurant.tenant.businessName || restaurant.name,
     currency: restaurant.currency,
     items: lineSnapshots,
+    orderItems,
     subtotal,
     discountTotal,
     total,

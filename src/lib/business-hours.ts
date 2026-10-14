@@ -37,3 +37,27 @@ export function isBusinessOpenNow(schedules: ScheduleEntry[], now = new Date()):
   // handles schedules that cross midnight (e.g. 03:00 PM - 01:00 AM)
   return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
 }
+
+const dayNames = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+
+// Returns the nearest opening ("09:00 AM" today, or "el martes a las 09:00 AM"), or null if none is configured.
+export function getNextOpeningLabel(schedules: ScheduleEntry[], now = new Date()): string | null {
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  for (let offset = 0; offset < 7; offset++) {
+    const jsDay = (now.getDay() + offset) % 7;
+    const dayOfWeek = jsDay === 0 ? 7 : jsDay;
+    const entry = schedules.find((schedule) => schedule.dayOfWeek === dayOfWeek);
+    if (!entry || !entry.enabled || !entry.openTime) continue;
+
+    const openMinutes = parseTimeToMinutes(entry.openTime);
+    if (openMinutes === null) continue;
+    if (offset === 0 && openMinutes <= nowMinutes) continue;
+
+    if (offset === 0) return entry.openTime;
+    if (offset === 1) return `mañana a las ${entry.openTime}`;
+    return `el ${dayNames[jsDay]} a las ${entry.openTime}`;
+  }
+
+  return null;
+}

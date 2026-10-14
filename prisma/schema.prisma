@@ -90,6 +90,8 @@ model Tenant {
 
   testimonials BusinessTestimonial[]
 
+  subscription TenantSubscription?
+
   @@map("tenants")
 }
 
@@ -932,6 +934,15 @@ model Order {
 
   items OrderItem[]
 
+  deliveryCode DeliveryCode?
+
+  deliveredToName String?
+
+  // pending: waiting for the customer, confirmed: customer received it, disputed: customer says it was not delivered
+  deliveryConfirmation String?
+
+  deliveryConfirmedAt DateTime?
+
   @@index([paymentProvider, externalPaymentId])
 
   @@map("orders")
@@ -1103,4 +1114,123 @@ model BusinessDayClosure {
 
   @@index([tenantId, endsAt])
   @@map("business_day_closures")
+}
+model DeliveryCode {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  orderId String @unique
+
+  code String
+
+  // Holds the code only while it is active, so active codes are unique across tenants.
+  activeCode String? @unique
+
+  expiresAt DateTime
+
+  claimedAt DateTime?
+
+  deliveredAt DateTime?
+
+  driverLatitude Float?
+
+  driverLongitude Float?
+
+  locationUpdatedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("delivery_codes")
+}
+
+
+model TenantSubscription {
+  id String @id @default(uuid())
+
+  tenantId String @unique
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  monthlyPrice Float
+
+  currency String @default("MXN")
+
+  currentPeriodEnd DateTime?
+
+  lastPaymentAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("tenant_subscriptions")
+}
+
+model SubscriptionPayment {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  amount Float
+
+  currency String @default("MXN")
+
+  // pending | paid | failed
+  status String @default("pending")
+
+  provider String @default("clip")
+
+  externalPaymentId String?
+
+  checkoutUrl String?
+
+  periodStart DateTime?
+
+  periodEnd DateTime?
+
+  paidAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, createdAt])
+  @@index([provider, externalPaymentId])
+  @@map("subscription_payments")
+}
+
+model SalesHourlyStat {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  // YYYY-MM-DD in the business timezone
+  date String
+
+  year Int
+
+  month Int
+
+  // 0 = Sunday
+  dayOfWeek Int
+
+  hour Int
+
+  source String
+
+  orders Int
+
+  units Int
+
+  revenue Float
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, date, hour, source])
+  @@index([tenantId, year, month])
+  @@map("sales_hourly_stats")
 }

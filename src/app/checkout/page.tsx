@@ -9,6 +9,7 @@ import { cartUpdatedEvent } from "@/src/hooks/use-cart-count";
 
 type CartLine = {
   productId: string;
+  packageId?: string;
   name: string;
   price: number;
   quantity: number;
@@ -27,7 +28,7 @@ type TransferDetails = { bankName: string; accountHolder: string; accountNumber:
 type CheckoutQuote = {
   businessName: string;
   currency: string;
-  items: Array<{ productId: string; name: string; quantity: number; unitPrice: number; totalPrice: number; additions: Array<{ name: string; price: number }> }>;
+  items: Array<{ productId: string; packageId?: string; name: string; quantity: number; unitPrice: number; totalPrice: number; additions: Array<{ name: string; price: number }> }>;
   subtotal: number;
   discountTotal: number;
   total: number;
@@ -281,7 +282,7 @@ export default function CheckoutPage() {
                   <h2 className="text-xl font-semibold">{quote?.businessName || "Tu negocio"}</h2>
                   <div className="mt-4 divide-y">
                     {(quote?.items || cart.lines).map((item, index) => (
-                      <div key={`${item.productId}-${index}`} className="flex justify-between gap-4 py-3">
+                      <div key={`${item.packageId ?? item.productId}-${index}`} className="flex justify-between gap-4 py-3">
                         <div>
                           <p className="font-medium">{item.quantity} × {item.name}</p>
                           {item.additions.length > 0 && <p className="text-sm text-slate-500">{item.additions.map((addition) => addition.name).join(", ")}</p>}

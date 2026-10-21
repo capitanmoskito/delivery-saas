@@ -1,5 +1,8 @@
 import { prisma } from "@/src/lib/prisma";
 import { decryptPaymentCredentials } from "@/src/lib/payment-credentials";
+import { calculateDeliveryFee, defaultDeliverySettings, type DeliveryFeeSettings } from "@/src/modules/delivery/delivery-fee";
+
+export type FulfillmentType = "pickup" | "delivery";
 
 export type CheckoutItemInput = {
   productId: string;
@@ -36,6 +39,12 @@ export type CheckoutQuote = {
   orderItems: CheckoutOrderItem[];
   subtotal: number;
   discountTotal: number;
+  deliveryFee: number;
+  deliveryDistanceKm: number | null;
+  deliveryError: string | null;
+  fulfillmentType: FulfillmentType;
+  fulfillment: DeliveryFeeSettings;
+  pickupAddress: string | null;
   total: number;
   discountCode: string | null;
   promoCodeId: string | null;
@@ -63,12 +72,14 @@ export async function buildCheckoutQuote({
   items,
   discountCode,
   paymentMethod,
+  fulfillmentType,
   userId,
 }: {
   restaurantId: string;
   items: CheckoutItemInput[];
   discountCode: string;
   paymentMethod: "card" | "transfer";
+  fulfillmentType: FulfillmentType;
   userId: string;
 }): Promise<CheckoutQuote> {
   if (!restaurantId || items.length === 0) throw new CheckoutQuoteError("El carrito está vacío o no es válido.");
@@ -224,7 +235,26 @@ export async function buildCheckoutQuote({
   }
 
   const discountTotal = roundMoney(Math.min(subtotal, promotionDiscount + couponDiscount));
-  const total = roundMoney(Math.max(0, subtotal - discountTotal));
+  const [deliveryRecord, businessProfile] = await Promise.all([
+    prisma.businessDeliverySettings.findUnique({ where: { tenantId: restaurant.tenantId } }),
+    prisma.businessProfile.findUnique({
+      where: { tenantId: restaurant.tenantId },
+      select: { latitude: true, longitude: true, addressLine: true, neighborhood: true, city: true, state: true, postalCode: true },
+    }),
+  ]);
+  const fulfillment: DeliveryFeeSettings = deliveryRecord
+    ? {
+        pickupEnabled: deliveryRecord.pickupEnabled,
+        deliveryEnabled: deliveryRecord.deliveryEnabled,
+        feeType: deliveryRecord.feeType === "per_km" ? "per_km" : "fixed",
+        fixedFee: deliveryRecord.fixedFee,
+        perKmFee: deliveryRecord.perKmFee,
+        maxDistanceKm: deliveryRecord.maxDistanceKm,
+      }
+    : defaultDeliverySettings;
+  const pickupAddress = businessProfile
+    ? [businessProfile.addressLine, businessProfile.neighborhood, businessProfile.city, businessProfile.state, businessProfile.postalCode].filter(Boolean).join(", ") || null
+    : null;
   const [providers, transfer, user, address] = await Promise.all([
     prisma.paymentProviderConfig.findMany({ where: { tenantId: restaurant.tenantId, enabled: true }, select: { provider: true, credentialsEncrypted: true } }),
     prisma.businessTransferDetails.findUnique({ where: { tenantId: restaurant.tenantId } }),
@@ -245,9 +275,28 @@ export async function buildCheckoutQuote({
       continue;
     }
   }
+  let deliveryFee = 0;
+  let deliveryDistanceKm: number | null = null;
+  let deliveryError: string | null = null;
+  if (fulfillmentType === "delivery") {
+    const result = calculateDeliveryFee(
+      fulfillment,
+      { latitude: businessProfile?.latitude ?? null, longitude: businessProfile?.longitude ?? null },
+      { latitude: address?.latitude ?? null, longitude: address?.longitude ?? null },
+    );
+    if (result.ok) {
+      deliveryFee = result.fee;
+      deliveryDistanceKm = result.distanceKm;
+    } else {
+      deliveryError = result.error;
+    }
+  } else if (!fulfillment.pickupEnabled) {
+    deliveryError = "Este negocio no ofrece recolección en tienda.";
+  }
+  const total = roundMoney(Math.max(0, subtotal - discountTotal) + deliveryFee);
   const transferEnabled = Boolean(transfer?.enabled && transfer.bankName && transfer.accountHolder && (transfer.accountNumber || transfer.clabe));
   const profileComplete = Boolean(
-    user.firstName && user.lastNamePaternal && address?.street && address.postalCode && address.neighborhood && address.city && address.state && /^\d{10}$/.test(address.contactPhone || ""),
+    user.firstName && user.lastNamePaternal && (fulfillmentType === "pickup" || (address?.street && address.postalCode && address.neighborhood && address.city && address.state && /^\d{10}$/.test(address.contactPhone || ""))),
   );
 
   return {
@@ -259,6 +308,12 @@ export async function buildCheckoutQuote({
     orderItems,
     subtotal,
     discountTotal,
+    deliveryFee,
+    deliveryDistanceKm,
+    deliveryError,
+    fulfillmentType,
+    fulfillment,
+    pickupAddress,
     total,
     discountCode: normalizedCode,
     promoCodeId,

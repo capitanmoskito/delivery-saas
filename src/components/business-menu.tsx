@@ -14,7 +14,6 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   { href: "/business/dashboard", label: "Resumen" },
-  { href: "/business/menu", label: "Menú" },
   { href: "/business/orders", label: "Pedidos" },
   { href: "/business/categories", label: "Categorías" },
   { href: "/business/products", label: "Productos" },

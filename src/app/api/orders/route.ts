@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { startOfDay, toDateKey } from "@/src/lib/business-time";
 import { getCurrentUser } from "@/src/lib/current-user";
 import { prisma } from "@/src/lib/prisma";
+import { generateOrderNumber } from "@/src/modules/orders/order-number";
 import { ensureDeliveryCode, releaseDeliveryCode } from "@/src/modules/delivery/delivery-code";
 
 const orderStatuses = ["pending_payment", "accepted", "preparing", "ready_pickup", "ready_delivery", "delivered"] as const;
@@ -231,7 +232,7 @@ export async function POST(request: Request) {
     });
     const discountTotal = Math.min(subtotal, discountEntries.reduce((total, item) => total + item.discount, 0));
     const displayName = customerName || `Mesa ${tableNumber}`;
-    const orderNumber = `ORD-${Date.now()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+    const orderNumber = generateOrderNumber(source === "online" ? "online" : "local");
 
     const order = await prisma.$transaction(async (transaction) => {
       const customer = await transaction.customer.create({

@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { AlertTriangle } from "lucide-react";
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { AlertTriangle, Bell, Volume2, VolumeX } from "lucide-react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
 import AddressFields, { type AddressValue } from "@/src/components/location/address-fields";
 
@@ -16,6 +16,28 @@ type OrderStatus = "pending_payment" | "accepted" | "preparing" | "ready_pickup"
 type Order = { deliveryConfirmation?: string | null; deliveredToName?: string | null; deliveryCode?: { code: string; activeCode: string | null; expiresAt: string } | null; id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; paymentMethod: string; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
 type DraftItem = { productId: string; name: string; quantity: number; additionIds: string[]; additions: Variant[]; total: number };
 type Closure = { orderCount: number; totalAmount: number; onlineOrderCount: number; localOrderCount: number; summary: { busiestHours: Array<{ hour: number; orderCount: number }>; starDishes: Array<{ name: string; quantity: number }>; recurringCustomers: Array<{ name: string; orders: number }> } };
+
+const SOUND_KEY = "orders-sound-enabled";
+
+function isNotifiable(order: Order) {
+  return order.source === "online" && !(order.status === "pending_payment" && order.paymentMethod !== "transfer");
+}
+
+function playChime(context: AudioContext) {
+  [880, 1175, 880, 1175].forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const start = context.currentTime + index * 0.22;
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.35, start + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.2);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.21);
+  });
+}
 
 const statusLabels: Record<OrderStatus, string> = { pending_payment: "Pago pendiente", accepted: "Orden aceptada", preparing: "En preparación", ready_pickup: "Lista para recoger", ready_delivery: "Lista para envío", delivered: "Entregada" };
 const emptyDeliveryAddress: AddressValue = { street: "", postalCode: "", neighborhood: "", city: "", state: "", country: "México", reference: "", contactPhone: "", latitude: null, longitude: null };
@@ -49,6 +71,31 @@ export default function OrdersPage() {
   const [closing, setClosing] = useState(false);
   const [closure, setClosure] = useState<Closure | null>(null);
   const [error, setError] = useState("");
+  const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const knownIdsRef = useRef<Set<string> | null>(null);
+  const audioRef = useRef<AudioContext | null>(null);
+  const soundRef = useRef(true);
+
+  function seedKnown(list: Order[]) {
+    const known = knownIdsRef.current ?? new Set<string>();
+    list.filter((order) => !isNotifiable(order) || knownIdsRef.current === null).forEach((order) => { if (isNotifiable(order)) known.add(order.id); });
+    knownIdsRef.current = known;
+  }
+
+  function ensureAudio() {
+    if (!audioRef.current && typeof window !== "undefined" && "AudioContext" in window) audioRef.current = new AudioContext();
+    if (audioRef.current?.state === "suspended") void audioRef.current.resume();
+    return audioRef.current;
+  }
+
+  function toggleSound() {
+    const next = !soundRef.current;
+    soundRef.current = next;
+    setSoundEnabled(next);
+    window.localStorage.setItem(SOUND_KEY, next ? "1" : "0");
+    if (next) { const context = ensureAudio(); if (context) playChime(context); }
+  }
 
   async function loadData() {
     const [productsResponse, ordersResponse] = await Promise.all([fetch("/api/products"), fetch("/api/orders")]);
@@ -57,6 +104,7 @@ export default function OrdersPage() {
     if (!productsResponse.ok || !Array.isArray(productsData)) { setError("No se pudieron cargar los productos"); return; }
     if (!ordersResponse.ok || !Array.isArray(ordersData)) { setError("No se pudieron cargar los pedidos"); return; }
     setProducts(productsData as Product[]);
+    seedKnown(ordersData as Order[]);
     setOrders(ordersData as Order[]);
   }
 
@@ -84,6 +132,7 @@ export default function OrdersPage() {
         }
 
         setProducts(productsData as Product[]);
+        seedKnown(ordersData as Order[]);
         setOrders(ordersData as Order[]);
       } catch {
         if (active) {
@@ -98,6 +147,68 @@ export default function OrdersPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    let inFlight = false;
+
+    async function pollOrders() {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      try {
+        const response = await fetch("/api/orders", { cache: "no-store" });
+        const data: unknown = await response.json();
+        if (!active || !response.ok || !Array.isArray(data)) return;
+        const list = data as Order[];
+        const known = knownIdsRef.current;
+        if (known) {
+          const fresh = list.filter((order) => isNotifiable(order) && !known.has(order.id));
+          if (fresh.length > 0) {
+            fresh.forEach((order) => known.add(order.id));
+            setNewOrderIds((current) => [...current, ...fresh.map((order) => order.id)]);
+            if (soundRef.current && audioRef.current) playChime(audioRef.current);
+          }
+        } else {
+          seedKnown(list);
+        }
+        setOrders(list);
+      } catch {
+        // Next poll retries silently.
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const stored = window.localStorage.getItem(SOUND_KEY) !== "0";
+    soundRef.current = stored;
+    const soundTimer = window.setTimeout(() => setSoundEnabled(stored), 0);
+    const unlockAudio = () => { ensureAudio(); };
+    document.addEventListener("pointerdown", unlockAudio, { once: true });
+    const timer = window.setInterval(() => void pollOrders(), 8000);
+    const onVisible = () => void pollOrders();
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
+    return () => {
+      active = false;
+      window.clearTimeout(soundTimer);
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      document.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (newOrderIds.length === 0) return;
+    const original = document.title;
+    let on = true;
+    const timer = window.setInterval(() => {
+      document.title = on ? `🔔 (${newOrderIds.length}) Nuevo pedido` : original;
+      on = !on;
+    }, 1000);
+    return () => { window.clearInterval(timer); document.title = original; };
+  }, [newOrderIds.length]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 60000);
@@ -240,8 +351,19 @@ export default function OrdersPage() {
       {packageSelections.length > 0 && <div className="rounded border p-4"><h3 className="font-semibold">Paquetes de la orden</h3>{packageSelections.map((item, index) => <div key={`${item.packageId}-${index}`} className="mt-2 flex justify-between gap-3 text-sm"><div><p>{item.quantity}x {item.name}</p>{item.complements.length > 0 && <p className="text-slate-500">{item.complements.map((complement) => complement.name).join(", ")}</p>}</div><div className="flex items-center gap-3"><span className="font-medium">${((item.price + item.complements.reduce((total, complement) => total + complement.price, 0)) * item.quantity).toFixed(2)}</span><button type="button" onClick={() => setPackageSelections((current) => current.filter((_, selectionIndex) => selectionIndex !== index))} className="text-red-600">Quitar</button></div></div>)}</div>}
       {(items.length > 0 || packageSelections.length > 0) && <div className="rounded border p-4"><h3 className="font-semibold">Productos de la orden</h3><div className="mt-3 space-y-2">{items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-start justify-between gap-3 border-b pb-2 text-sm"><div><p>{item.quantity}x {item.name}</p>{item.additions.length > 0 && <p className="text-slate-500">{item.additions.map((addition) => addition.name).join(", ")}</p>}</div><div className="flex items-center gap-3"><span>${item.total.toFixed(2)}</span><button type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="text-red-600">Quitar</button></div></div>)}</div><div className="mt-3 space-y-1 text-right"><p>Subtotal: ${formSubtotal.toFixed(2)}</p>{promotionDiscount > 0 && <p className="text-action">Promociones: -${promotionDiscount.toFixed(2)}</p>}<p className="font-semibold">Monto: ${formTotal.toFixed(2)}</p></div></div>}
       {error && <p className="text-sm text-red-600">{error}</p>}<div><button type="button" onClick={createOrder} disabled={saving || (items.length === 0 && packageSelections.length === 0)} className="rounded bg-action px-4 py-2 text-white disabled:bg-gray-400">{saving ? "Guardando..." : editingOrderId ? "Guardar cambios" : "Guardar orden completa"}</button><button type="button" onClick={resetOrder} className="ml-2 rounded border px-4 py-2">Cancelar</button></div></section>}
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      {newOrderIds.length > 0 ? (
+        <div role="alert" className="flex flex-1 items-center justify-between gap-3 rounded-xl border-2 border-action bg-action/10 px-4 py-3 text-dark animate-pulse">
+          <span className="flex items-center gap-2 font-semibold"><Bell size={20} className="text-action" /> {newOrderIds.length === 1 ? "Llegó 1 pedido nuevo" : `Llegaron ${newOrderIds.length} pedidos nuevos`}</span>
+          <button type="button" onClick={() => setNewOrderIds([])} className="rounded-full bg-action px-4 py-1.5 text-sm font-medium text-white">Entendido</button>
+        </div>
+      ) : <span />}
+      <button type="button" onClick={toggleSound} aria-pressed={soundEnabled} className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-sm text-slate-600">
+        {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />} Sonido {soundEnabled ? "activado" : "silenciado"}
+      </button>
+    </div>
     {error && !showForm && <p className="mt-4 text-sm text-red-600">{error}</p>}{closure && <ClosureSummary closure={closure} onClose={() => setClosure(null)} />}
-    <OrdersTable title="Pedidos en línea" orders={orders.filter((order) => order.source === "online")} onDispute={setDisputeOrderId} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} /><OrdersTable title="Pedidos en local" orders={orders.filter((order) => order.source === "local")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} />
+    <OrdersTable title="Pedidos en línea" highlightIds={newOrderIds} orders={orders.filter((order) => order.source === "online")} onDispute={setDisputeOrderId} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} /><OrdersTable title="Pedidos en local" orders={orders.filter((order) => order.source === "local")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} />
     {codeOrder && <DeliveryCodeModal order={codeOrder} confirming={confirmingClose} onAskClose={() => setConfirmingClose(true)} onKeepOpen={() => setConfirmingClose(false)} onClose={() => { setConfirmingClose(false); setCodeOrderId(null); }} />}
     {disputeOrderId && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -257,8 +379,8 @@ export default function OrdersPage() {
   </div>;
 }
 
-function OrdersTable({ title, orders, onDispute, onUpdate, onEdit, currentTime }: { title: string; orders: Order[]; onDispute?: (orderId: string) => void; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void; onEdit: (order: Order) => void; currentTime: number | null }) {
-  return <section className="mt-8"><h2 className="mb-3 text-xl font-semibold">{title}</h2><div className="overflow-x-auto rounded border"><table className="w-full min-w-250 text-left text-sm [&_th:nth-child(5)]:w-36 [&_td:nth-child(5)]:w-36 [&_td:nth-child(5)>div]:min-w-0"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Número</th><th className="p-3">Desde</th><th className="p-3">Cliente</th><th className="p-3">Dirección / mesa</th><th className="p-2">Estatus</th><th className="p-3">Tiempo de entrega</th><th className="p-3">Monto</th></tr></thead><tbody>{orders.map((order) => <Fragment key={order.id}><tr className="border-t"><td colSpan={7} className="p-0"><OrderProgressBar order={order} /></td></tr><tr className="align-top"><td className="p-3">{order.orderNumber || order.id.slice(0, 8)}{order.deliveryConfirmation === "disputed" && onDispute && <button type="button" onClick={() => onDispute(order.id)} aria-label="Cliente reporta que no recibió el pedido" className="ml-2 inline-flex align-middle text-amber-500"><AlertTriangle size={18} /></button>}</td><td className="p-3">{order.source === "online" ? "En línea" : "En local"}</td><td className="p-3">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</td><td className="p-3">{order.deliveryAddress || (order.tableNumber ? `Mesa ${order.tableNumber}` : "Para recoger")}</td><td className="w-36 p-2"><OrderStatusControls order={order} onUpdate={onUpdate} /></td><td className="p-3"><DeliveryDuration order={order} currentTime={currentTime} /></td><td className="p-3">${order.total.toFixed(2)}<br /><span className="text-xs text-slate-500">{order.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</span>{order.source === "local" && !(order.status === "delivered" && order.paymentStatus === "paid") && <button type="button" onClick={() => onEdit(order)} className="mt-3 block rounded bg-action px-4 py-2 text-sm font-medium text-white">Editar orden</button>}</td></tr></Fragment>)}{orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No hay pedidos.</td></tr>}</tbody></table></div></section>;
+function OrdersTable({ title, orders, highlightIds = [], onDispute, onUpdate, onEdit, currentTime }: { title: string; orders: Order[]; highlightIds?: string[]; onDispute?: (orderId: string) => void; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void; onEdit: (order: Order) => void; currentTime: number | null }) {
+  return <section className="mt-8"><h2 className="mb-3 text-xl font-semibold">{title}</h2><div className="overflow-x-auto rounded border"><table className="w-full min-w-250 text-left text-sm [&_th:nth-child(5)]:w-36 [&_td:nth-child(5)]:w-36 [&_td:nth-child(5)>div]:min-w-0"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Número</th><th className="p-3">Desde</th><th className="p-3">Cliente</th><th className="p-3">Dirección / mesa</th><th className="p-2">Estatus</th><th className="p-3">Tiempo de entrega</th><th className="p-3">Monto</th></tr></thead><tbody>{orders.map((order) => <Fragment key={order.id}><tr className="border-t"><td colSpan={7} className="p-0"><OrderProgressBar order={order} /></td></tr><tr className={`align-top ${highlightIds.includes(order.id) ? "bg-action/10" : ""}`}><td className="p-3">{order.orderNumber || order.id.slice(0, 8)}{order.deliveryConfirmation === "disputed" && onDispute && <button type="button" onClick={() => onDispute(order.id)} aria-label="Cliente reporta que no recibió el pedido" className="ml-2 inline-flex align-middle text-amber-500"><AlertTriangle size={18} /></button>}</td><td className="p-3">{order.source === "online" ? "En línea" : "En local"}</td><td className="p-3">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</td><td className="p-3"><span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${order.fulfillmentType === "delivery" ? "bg-action/10 text-action" : "bg-slate-100 text-slate-700"}`}>{order.fulfillmentType === "delivery" ? "Para llevar · Envío" : order.fulfillmentType === "dine_in" ? "En local" : "Para recoger"}</span><div>{order.deliveryAddress || (order.tableNumber ? `Mesa ${order.tableNumber}` : "")}</div></td><td className="w-36 p-2"><OrderStatusControls order={order} onUpdate={onUpdate} /></td><td className="p-3"><DeliveryDuration order={order} currentTime={currentTime} /></td><td className="p-3">${order.total.toFixed(2)}<br /><span className="text-xs text-slate-500">{order.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</span>{order.source === "local" && !(order.status === "delivered" && order.paymentStatus === "paid") && <button type="button" onClick={() => onEdit(order)} className="mt-3 block rounded bg-action px-4 py-2 text-sm font-medium text-white">Editar orden</button>}</td></tr></Fragment>)}{orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No hay pedidos.</td></tr>}</tbody></table></div></section>;
 }
 
 function DeliveryDuration({ order, currentTime }: { order: Order; currentTime: number | null }) {
@@ -323,10 +445,30 @@ function DeliveryCodeModal({ order, confirming, onAskClose, onKeepOpen, onClose 
 }
 
 function DeliveryCodesPanel({ orders }: { orders: Order[] }) {
+  const [copied, setCopied] = useState(false);
+  const allCodes = orders.flatMap((order) => (order.deliveryCode?.activeCode ? [order.deliveryCode.activeCode] : []));
+
+  async function copyAll() {
+    try {
+      await navigator.clipboard.writeText(allCodes.join(" "));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <section className="mt-8">
       <h2 className="mb-1 text-xl font-semibold">Códigos de envío</h2>
-      <p className="mb-3 text-sm text-slate-500">Comparte el código con tu repartidor; lo ingresa en <span className="font-medium">/delivery</span> para ver el pedido y su ruta.</p>
+      <p className="mb-3 text-sm text-slate-500">Comparte los códigos con tu repartidor; los ingresa juntos en <span className="font-medium">/delivery</span> para hacer varios envíos en una sola ruta.</p>
+      {allCodes.length > 1 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-action/40 bg-action/5 p-3">
+          <span className="text-sm font-semibold">{allCodes.length} códigos listos:</span>
+          <span className="font-mono text-lg font-bold tracking-widest">{allCodes.join(" ")}</span>
+          <button type="button" onClick={() => void copyAll()} className="rounded-full bg-action px-4 py-1.5 text-sm font-medium text-white">{copied ? "¡Copiado!" : "Copiar todos"}</button>
+        </div>
+      )}
       {orders.length === 0 ? (
         <p className="rounded border p-4 text-sm text-slate-500">No hay códigos activos. Se genera uno al marcar un pedido como «Lista para envío».</p>
       ) : (

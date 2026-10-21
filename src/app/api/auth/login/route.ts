@@ -47,6 +47,15 @@ export async function POST(
       }
     );
 
+    response.cookies.set(
+      "announcement_seed",
+      String(Math.floor(Math.random() * 1_000_000)),
+      {
+        httpOnly: true,
+        path: "/"
+      }
+    );
+
     return response;
 
   } catch (error) {

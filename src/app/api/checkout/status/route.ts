@@ -31,7 +31,7 @@ export async function GET(request: Request) {
   const [current, restaurant, transfer] = await Promise.all([
     prisma.order.findUnique({
       where: { id: order.id },
-      select: { id: true, orderNumber: true, total: true, paymentStatus: true, paymentMethod: true, status: true },
+      select: { id: true, orderNumber: true, total: true, paymentStatus: true, paymentMethod: true, status: true, fulfillmentType: true },
     }),
     prisma.restaurant.findFirst({ where: { tenantId: order.tenantId }, select: { currency: true } }),
     order.paymentMethod === "transfer"

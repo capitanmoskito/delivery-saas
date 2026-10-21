@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 
@@ -31,6 +32,11 @@ type CheckoutQuote = {
   items: Array<{ productId: string; packageId?: string; name: string; quantity: number; unitPrice: number; totalPrice: number; additions: Array<{ name: string; price: number }> }>;
   subtotal: number;
   discountTotal: number;
+  deliveryFee: number;
+  deliveryDistanceKm: number | null;
+  deliveryError: string | null;
+  fulfillment: { pickupEnabled: boolean; deliveryEnabled: boolean; feeType: "fixed" | "per_km"; fixedFee: number; perKmFee: number };
+  pickupAddress: string | null;
   total: number;
   discountCode: string | null;
   appliedPromotions: Array<{ id: string; name: string; discount: number; code?: string }>;
@@ -61,9 +67,11 @@ export default function CheckoutPage() {
   const [customerStatus, setCustomerStatus] = useState<"loading" | "active" | "guest">("loading");
   const [quote, setQuote] = useState<CheckoutQuote | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"card" | "transfer">("card");
+  const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">("delivery");
   const [provider, setProvider] = useState<"mercadopago" | "clip">("mercadopago");
   const [discountCode, setDiscountCode] = useState("");
   const [appliedCode, setAppliedCode] = useState("");
+  const router = useRouter();
   const [message, setMessage] = useState("");
   const [orderId, setOrderId] = useState("");
   const [paymentId, setPaymentId] = useState("");
@@ -117,7 +125,7 @@ export default function CheckoutPage() {
         const response = await fetch("/api/checkout/quote", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ restaurantId: currentCart.restaurantId, items: currentCart.lines, discountCode: appliedCode, paymentMethod }),
+          body: JSON.stringify({ restaurantId: currentCart.restaurantId, items: currentCart.lines, discountCode: appliedCode, paymentMethod, fulfillmentType }),
         });
         const data: CheckoutQuote & { error?: string } = await response.json();
         if (!response.ok) {
@@ -128,6 +136,8 @@ export default function CheckoutPage() {
         setQuote(data);
         setMessage("");
         setDiscountCode(data.discountCode || "");
+        if (fulfillmentType === "delivery" && !data.fulfillment.deliveryEnabled && data.fulfillment.pickupEnabled) setFulfillmentType("pickup");
+        if (fulfillmentType === "pickup" && !data.fulfillment.pickupEnabled && data.fulfillment.deliveryEnabled) setFulfillmentType("delivery");
         if (data.paymentMethods.cardProviders.length === 0 && data.paymentMethods.transferEnabled && paymentMethod !== "transfer") {
           setPaymentMethod("transfer");
         }
@@ -143,12 +153,11 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [customerStatus, cart, appliedCode, paymentMethod, provider, orderId]);
+  }, [customerStatus, cart, appliedCode, paymentMethod, fulfillmentType, provider, orderId]);
 
   useEffect(() => {
     if (customerStatus !== "active" || !orderId) return;
     let cancelled = false;
-    let attempts = 0;
     let timer: number | undefined;
 
     async function checkStatus() {
@@ -156,7 +165,7 @@ export default function CheckoutPage() {
         const query = new URLSearchParams({ orderId });
         if (paymentId) query.set("paymentId", paymentId);
         const response = await fetch(`/api/checkout/status?${query.toString()}`);
-        const data: { order?: { orderNumber: string | null; total: number; paymentStatus: string; paymentMethod: string }; currency?: string; transfer?: TransferDetails | null; error?: string } = await response.json();
+        const data: { order?: { orderNumber: string | null; total: number; paymentStatus: string; paymentMethod: string; fulfillmentType?: string }; currency?: string; transfer?: TransferDetails | null; error?: string } = await response.json();
         if (!response.ok || !data.order) return;
         setOrderTotal(data.order.total);
         if (data.currency) setOrderCurrency(data.currency);
@@ -168,18 +177,12 @@ export default function CheckoutPage() {
           setCart(null);
           setPaid(true);
           setTransferDetails(null);
-          setMessage(`Pago confirmado. Pedido ${data.order.orderNumber || orderId}.`);
+          setMessage(data.order.fulfillmentType === "pickup" ? `Pago confirmado. Pasa a recoger tu pedido y muestra el número ${data.order.orderNumber || orderId}.` : `Pago confirmado. Pedido ${data.order.orderNumber || orderId}.`);
           return;
         }
-        if (attempts < 12 && !cancelled) {
-          attempts += 1;
-          timer = window.setTimeout(() => void checkStatus(), 5000);
-        }
+        if (!cancelled) timer = window.setTimeout(() => void checkStatus(), 5000);
       } catch {
-        if (!cancelled && attempts < 12) {
-          attempts += 1;
-          timer = window.setTimeout(() => void checkStatus(), 5000);
-        }
+        if (!cancelled) timer = window.setTimeout(() => void checkStatus(), 5000);
       }
     }
 
@@ -189,6 +192,12 @@ export default function CheckoutPage() {
       if (timer) window.clearTimeout(timer);
     };
   }, [customerStatus, orderId, paymentId]);
+
+  useEffect(() => {
+    if (!paid) return;
+    const timer = window.setTimeout(() => router.push("/cart"), 4000);
+    return () => window.clearTimeout(timer);
+  }, [paid, router]);
 
   async function applyDiscountCode() {
     setAppliedCode(discountCode.trim().toUpperCase());
@@ -208,6 +217,7 @@ export default function CheckoutPage() {
           items: cart.lines,
           discountCode: quote.discountCode || "",
           paymentMethod,
+          fulfillmentType,
           provider: paymentMethod === "card" ? provider : undefined,
         }),
       });
@@ -272,7 +282,7 @@ export default function CheckoutPage() {
             <section className="space-y-6">
               {!paid && quote?.profileComplete === false && (
                 <div className="rounded border border-amber-300 bg-amber-50 p-4">
-                  <p className="font-medium">Completa tu perfil y dirección para continuar.</p>
+                  <p className="font-medium">{fulfillmentType === "delivery" ? "Completa tu perfil y dirección para continuar." : "Completa tu perfil para continuar."}</p>
                   <Link href="/customer/profile" className="mt-2 inline-block font-semibold text-action underline">Ir a mi perfil</Link>
                 </div>
               )}
@@ -293,6 +303,36 @@ export default function CheckoutPage() {
                   </div>
                 </section>
               ) : null}
+
+              {quote && !paid && !orderId && (
+                <section className="rounded border p-5">
+                  <h2 className="text-xl font-semibold">Tipo de entrega</h2>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    {quote.fulfillment.deliveryEnabled && (
+                      <label className={`flex cursor-pointer items-center gap-2 rounded border px-4 py-3 ${fulfillmentType === "delivery" ? "border-action" : "border-border"}`}>
+                        <input type="radio" name="fulfillmentType" checked={fulfillmentType === "delivery"} onChange={() => setFulfillmentType("delivery")} /> Envío a domicilio
+                      </label>
+                    )}
+                    {quote.fulfillment.pickupEnabled && (
+                      <label className={`flex cursor-pointer items-center gap-2 rounded border px-4 py-3 ${fulfillmentType === "pickup" ? "border-action" : "border-border"}`}>
+                        <input type="radio" name="fulfillmentType" checked={fulfillmentType === "pickup"} onChange={() => setFulfillmentType("pickup")} /> Recoger en tienda
+                      </label>
+                    )}
+                  </div>
+                  {fulfillmentType === "delivery" && !quote.deliveryError && (
+                    <p className="mt-4 text-sm text-slate-600">
+                      Costo de envío: {formatMoney(quote.deliveryFee, quote.currency)}
+                      {quote.deliveryDistanceKm !== null && ` (${quote.deliveryDistanceKm} km de distancia)`}
+                    </p>
+                  )}
+                  {fulfillmentType === "pickup" && (
+                    <p className="mt-4 text-sm text-slate-600">
+                      {quote.pickupAddress ? `Recoge tu pedido en: ${quote.pickupAddress}. ` : ""}No necesitas código de envío; muestra el número de tu pedido en el negocio.
+                    </p>
+                  )}
+                  {quote.deliveryError && <p role="alert" className="mt-4 text-sm text-red-600">{quote.deliveryError}</p>}
+                </section>
+              )}
 
               {quote && !paid && !orderId && (
                 <section className="rounded border p-5">
@@ -369,7 +409,7 @@ export default function CheckoutPage() {
                 </a>
               )}
               {quote && !paid && !orderId && (quote.paymentMethods.cardProviders.length > 0 || quote.paymentMethods.transferEnabled) && (
-                <button type="button" disabled={loading || !quote.profileComplete} onClick={() => void placeOrder()} className="w-full rounded bg-action px-5 py-3 font-semibold text-white disabled:bg-gray-400 sm:w-auto">
+                <button type="button" disabled={loading || !quote.profileComplete || Boolean(quote.deliveryError)} onClick={() => void placeOrder()} className="w-full rounded bg-action px-5 py-3 font-semibold text-white disabled:bg-gray-400 sm:w-auto">
                   {loading ? "Procesando..." : paymentMethod === "transfer" ? "Generar pedido" : `Pagar ${formatMoney(quote.total, quote.currency)}`}
                 </button>
               )}
@@ -386,6 +426,7 @@ export default function CheckoutPage() {
                   {quote.appliedPromotions.map((promotion) => (
                     <div key={promotion.id} className="flex justify-between gap-4 text-green-700"><dt>{promotion.code ? `Código ${promotion.code}` : promotion.name}</dt><dd>−{formatMoney(promotion.discount, quote.currency)}</dd></div>
                   ))}
+                  <div className="flex justify-between gap-4"><dt>{fulfillmentType === "delivery" ? "Envío" : "Recoger en tienda"}</dt><dd>{fulfillmentType === "delivery" ? formatMoney(quote.deliveryFee, quote.currency) : "Gratis"}</dd></div>
                   <div className="flex justify-between gap-4 border-t pt-3 font-semibold text-dark"><dt>Total</dt><dd>{formatMoney(quote.total, quote.currency)}</dd></div>
                 </dl>
                 <p className="mt-4 text-xs text-slate-500">El total se confirma nuevamente al crear el pedido.</p>
@@ -396,6 +437,7 @@ export default function CheckoutPage() {
                 <h2 className="text-xl font-semibold">Pedido {orderNumber}</h2>
                 <p className="mt-4 flex justify-between gap-4 font-semibold"><span>Total</span><span>{formatMoney(orderTotal, orderCurrency)}</span></p>
                 <p className="mt-3 text-sm text-slate-600">Estado: {paid ? "Pagado" : "Pendiente de confirmación"}</p>
+                {paid && <Link href="/cart" className="mt-4 block rounded-full bg-action px-4 py-2.5 text-center font-medium text-white">Ver el seguimiento de mi pedido</Link>}
               </aside>
             )}
           </div>

@@ -35,6 +35,7 @@ export async function POST(request: Request) {
       items: normalizeItems(data.items),
       discountCode: String(data.discountCode ?? ""),
       paymentMethod,
+      fulfillmentType: data.fulfillmentType === "pickup" ? "pickup" : "delivery",
       userId: session.id,
     });
 

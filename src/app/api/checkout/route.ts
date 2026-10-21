@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/src/lib/current-user";
 import { decryptPaymentCredentials } from "@/src/lib/payment-credentials";
 import { isBusinessOpenNow } from "@/src/lib/business-hours";
 import { prisma } from "@/src/lib/prisma";
+import { generateOrderNumber } from "@/src/modules/orders/order-number";
 import { buildCheckoutQuote, CheckoutQuoteError, type CheckoutItemInput } from "@/src/modules/payments/checkout-quote";
 import { createPaymentProvider, type PaymentProviderName } from "@/src/modules/payments/payment-provider.factory";
 
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
     if (paymentMethod === "card" && requestedProvider !== "mercadopago" && requestedProvider !== "clip") {
       return NextResponse.json({ error: "Selecciona una pasarela de tarjeta disponible." }, { status: 400 });
     }
+    const fulfillmentType = data.fulfillmentType === "pickup" ? "pickup" : "delivery";
     const providerName = paymentMethod === "card" ? requestedProvider as PaymentProviderName : null;
     const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId }, select: { tenantId: true } });
     if (restaurant) {
@@ -53,10 +55,12 @@ export async function POST(request: Request) {
       items,
       discountCode: String(data.discountCode ?? ""),
       paymentMethod,
+      fulfillmentType,
       userId: session.id,
     });
+    if (quote.deliveryError) return NextResponse.json({ error: quote.deliveryError }, { status: 400 });
     if (!quote.profileComplete) {
-      return NextResponse.json({ error: "Completa tu perfil y una dirección con teléfono de 10 dígitos antes de pagar." }, { status: 400 });
+      return NextResponse.json({ error: fulfillmentType === "delivery" ? "Completa tu perfil y una dirección con teléfono de 10 dígitos antes de pagar." : "Completa tu perfil antes de pagar." }, { status: 400 });
     }
     if (paymentMethod === "card" && !quote.paymentMethods.cardProviders.includes(providerName as PaymentProviderName)) {
       return NextResponse.json({ error: "La pasarela seleccionada no está habilitada para este negocio." }, { status: 400 });
@@ -69,9 +73,10 @@ export async function POST(request: Request) {
       prisma.customerAddress.findFirst({ where: { userId: session.id }, orderBy: { updatedAt: "desc" } }),
       prisma.user.findUnique({ where: { id: session.id }, select: { firstName: true, lastNamePaternal: true, email: true, role: true } }),
     ]);
-    if (!address || !userProfile || userProfile.role !== "customer") {
+    if (!userProfile || userProfile.role !== "customer" || (fulfillmentType === "delivery" && !address)) {
       return NextResponse.json({ error: "Completa tu perfil y dirección antes de pagar." }, { status: 400 });
     }
+    const deliveryAddress = fulfillmentType === "delivery" ? address : null;
 
     const order = await prisma.$transaction(async (transaction) => {
       if (quote.promoCodeId) {
@@ -93,31 +98,33 @@ export async function POST(request: Request) {
 
       const customer = await transaction.customer.upsert({
         where: { tenantId_userId: { tenantId: quote.tenantId, userId: session.id as string } },
-        create: { tenantId: quote.tenantId, userId: session.id as string, firstName: userProfile.firstName, lastName: userProfile.lastNamePaternal, email: userProfile.email, phone: address.contactPhone },
-        update: { firstName: userProfile.firstName, lastName: userProfile.lastNamePaternal, phone: address.contactPhone }
+        create: { tenantId: quote.tenantId, userId: session.id as string, firstName: userProfile.firstName, lastName: userProfile.lastNamePaternal, email: userProfile.email, phone: address?.contactPhone ?? null },
+        update: { firstName: userProfile.firstName, lastName: userProfile.lastNamePaternal, ...(address?.contactPhone ? { phone: address.contactPhone } : {}) }
       });
       const createdOrder = await transaction.order.create({
         data: {
           tenantId: quote.tenantId,
           customerId: customer.id,
-          orderNumber: `WEB-${Date.now()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`,
+          orderNumber: generateOrderNumber("online"),
           source: "online",
-          fulfillmentType: "delivery",
+          fulfillmentType,
           paymentMethod,
           paymentProvider: providerName,
           paymentStatus: "pending",
           discountCode: quote.discountCode,
           appliedPromotions: quote.appliedPromotions,
           customerName: `${userProfile.firstName} ${userProfile.lastNamePaternal}`,
-          deliveryAddress: address.street,
-          postalCode: address.postalCode,
-          neighborhood: address.neighborhood,
-          city: address.city,
-          state: address.state,
-          deliveryReference: address.reference,
-          contactPhone: address.contactPhone,
-          latitude: address.latitude,
-          longitude: address.longitude,
+          deliveryAddress: deliveryAddress?.street ?? null,
+          postalCode: deliveryAddress?.postalCode ?? null,
+          neighborhood: deliveryAddress?.neighborhood ?? null,
+          city: deliveryAddress?.city ?? null,
+          state: deliveryAddress?.state ?? null,
+          deliveryReference: deliveryAddress?.reference ?? null,
+          contactPhone: address?.contactPhone ?? null,
+          latitude: deliveryAddress?.latitude ?? null,
+          longitude: deliveryAddress?.longitude ?? null,
+          deliveryFee: quote.deliveryFee,
+          deliveryDistanceKm: quote.deliveryDistanceKm,
           status: "pending_payment",
           subtotal: quote.subtotal,
           discountTotal: quote.discountTotal,

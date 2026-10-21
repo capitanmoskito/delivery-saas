@@ -21,6 +21,7 @@ from "@/src/components/settings/password-confirm-modal";
 
 import PaymentMethodsSettings
 from "@/src/components/settings/payment-methods-settings";
+import DeliverySettings from "@/src/components/settings/delivery-settings";
 
 import AddressFields
 from "@/src/components/location/address-fields";
@@ -1622,6 +1623,13 @@ const hasProfileChanges =
   <PaymentMethodsSettings
     onSaved={() => {
       setSaveMessage("Métodos de pago guardados correctamente");
+      setLocked(true);
+    }}
+  />
+
+  <DeliverySettings
+    onSaved={() => {
+      setSaveMessage("Configuración de envíos guardada correctamente");
       setLocked(true);
     }}
   />

@@ -938,6 +938,10 @@ model Order {
 
   deliveredToName String?
 
+  deliveryFee Float @default(0)
+
+  deliveryDistanceKm Float?
+
   // pending: waiting for the customer, confirmed: customer received it, disputed: customer says it was not delivered
   deliveryConfirmation String?
 
@@ -989,6 +993,62 @@ model BusinessTransferDetails {
   updatedAt DateTime @updatedAt
 
   @@map("business_transfer_details")
+}
+
+model BusinessDeliverySettings {
+  id String @id @default(uuid())
+
+  tenantId String @unique
+
+  pickupEnabled Boolean @default(true)
+
+  deliveryEnabled Boolean @default(false)
+
+  // fixed: one flat amount per order, per_km: amount multiplied by the distance to the customer
+  feeType String @default("fixed")
+
+  fixedFee Float @default(0)
+
+  perKmFee Float @default(0)
+
+  maxDistanceKm Float?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@map("business_delivery_settings")
+}
+
+// Platform-wide notices shown to tenants in the dashboard banner; managed from SaaS admin.
+model PlatformAnnouncement {
+  id String @id @default(uuid())
+
+  // text | image
+  type String @default("text")
+
+  title String?
+
+  message String?
+
+  imageUrl String?
+
+  linkUrl String?
+
+  active Boolean @default(true)
+
+  startsAt DateTime?
+
+  endsAt DateTime?
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@index([active, startsAt, endsAt])
+  @@map("platform_announcements")
 }
 
 model PaymentEvent {

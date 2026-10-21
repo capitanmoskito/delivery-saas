@@ -42,6 +42,7 @@ export async function GET() {
         id: order.id,
         orderNumber: order.orderNumber,
         status: order.status,
+        readyAt: order.readyAt?.toISOString() ?? null,
         deliveredToName: order.deliveredToName,
         deliveryConfirmation: order.deliveryConfirmation,
         paymentStatus: order.paymentStatus,

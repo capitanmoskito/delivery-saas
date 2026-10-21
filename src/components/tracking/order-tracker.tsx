@@ -10,6 +10,7 @@ export type TrackedOrder = {
   id: string;
   orderNumber: string | null;
   status: string;
+  readyAt: string | null;
   paymentStatus: string;
   fulfillmentType: string;
   total: number;
@@ -80,7 +81,7 @@ export default function OrderTracker({ orders, onChanged }: { orders: TrackedOrd
               <p className="font-bold">{symbol}{order.total.toFixed(2)}</p>
             </div>
 
-            {order.status === "delivered" && (
+            {order.status === "delivered" && order.fulfillmentType === "delivery" && (
               <div className="mt-4 rounded-xl border border-border bg-slate-50 p-4">
                 <p className="font-semibold text-dark">Nuestro repartidor entregó tu pedido a: {order.deliveredToName}</p>
                 {order.deliveryConfirmation === "disputed" && (
@@ -109,7 +110,24 @@ export default function OrderTracker({ orders, onChanged }: { orders: TrackedOrd
             <ul className="mt-3 text-sm text-slate-700">
               {order.items.map((item, index) => <li key={`${item.name}-${index}`}>{item.quantity}x {item.name}</li>)}
             </ul>
-            {order.deliveryAddress && <p className="mt-2 text-sm text-slate-600">Entrega en: {order.deliveryAddress}</p>}
+            {order.fulfillmentType === "delivery" && order.deliveryAddress && <p className="mt-2 text-sm text-slate-600">Entrega en: {order.deliveryAddress}</p>}
+            {order.fulfillmentType === "pickup" && order.status === "ready_pickup" && (
+              <div className="mt-4">
+                <div role="status" className="animate-pulse rounded-2xl border-4 border-action bg-white p-6 text-center">
+                  <p className="text-3xl font-extrabold uppercase tracking-wide text-action sm:text-4xl">¡Listo para recoger!</p>
+                </div>
+                <p className="mt-3 text-sm text-slate-700">
+                  Tu pedido quedó listo a las {order.readyAt ? new Date(order.readyAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", hour12: false }) : "--:--"}. Recoge lo más pronto posible tu pedido para que tus alimentos conserven la calidad y frescura.
+                </p>
+              </div>
+            )}
+            {order.fulfillmentType === "pickup" && order.status !== "delivered" && (
+              <div className="mt-3 rounded-xl border border-border bg-slate-50 p-3 text-sm">
+                <p className="font-semibold text-dark">Recoger en tienda</p>
+                <p className="text-slate-600">Muestra este número de pedido al recoger:</p>
+                <p className="mt-1 text-2xl font-bold tracking-wide text-dark">{order.orderNumber || order.id.slice(0, 8)}</p>
+              </div>
+            )}
 
             {order.status === "ready_delivery" && (
               <div className="mt-4">

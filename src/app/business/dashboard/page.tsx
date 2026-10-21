@@ -1,9 +1,12 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import SubscriptionNotice from "@/src/components/billing/subscription-notice";
+import AnnouncementBanner from "@/src/components/dashboard/announcement-banner";
 import SalesDashboard from "@/src/components/dashboard/sales-dashboard";
 import { getCurrentUser } from "@/src/lib/current-user";
 import { prisma } from "@/src/lib/prisma";
+import { getAnnouncementForSession } from "@/src/modules/announcements/announcement.service";
 import { getBillingOverview } from "@/src/modules/billing/subscription.service";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +18,11 @@ export default async function BusinessDashboardPage() {
     redirect("/login");
   }
 
-  const [tenant, overview] = await Promise.all([
+  const cookieStore = await cookies();
+  const [tenant, overview, announcement] = await Promise.all([
     prisma.tenant.findUnique({ where: { id: user.tenantId } }),
-    getBillingOverview(user.tenantId)
+    getBillingOverview(user.tenantId),
+    getAnnouncementForSession(cookieStore.get("announcement_seed")?.value)
   ]);
 
   if (!tenant) {
@@ -26,6 +31,8 @@ export default async function BusinessDashboardPage() {
 
   return (
     <div>
+      {announcement && <AnnouncementBanner announcement={announcement} />}
+
       {overview?.notice && <SubscriptionNotice notice={overview.notice} />}
 
       <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">

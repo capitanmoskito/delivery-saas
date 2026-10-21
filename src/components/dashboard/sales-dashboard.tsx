@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import OrdersHistory from "@/src/components/dashboard/orders-history";
 import type {
   MonthlyTrend,
   ProductSales,
@@ -332,6 +333,8 @@ function History({ data, money }: { data: SalesDashboardData; money: (value: num
           </table>
         </div>
       )}
+
+      <OrdersHistory />
     </Card>
   );
 }

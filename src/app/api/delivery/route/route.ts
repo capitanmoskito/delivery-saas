@@ -51,7 +51,8 @@ export async function POST(request: Request) {
       : [],
   );
   const plan = planRoute({
-    start: parseOrigin(data.origin),
+    // The courier starts at the business; the live origin only orders pickups when several businesses are involved.
+    start: pickups.length > 1 ? parseOrigin(data.origin) : null,
     pickups,
     drops: deliveryCodes.map((deliveryCode) => ({
       id: deliveryCode.id,

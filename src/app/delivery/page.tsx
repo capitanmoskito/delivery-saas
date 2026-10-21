@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Navigation, Phone, Store, X } from "lucide-react";
+import { MapPin, Phone, X } from "lucide-react";
 
 import DeliveryMap, { type MapPoint } from "@/src/components/delivery/delivery-map";
 import type { Coordinates } from "@/src/modules/delivery/route-optimizer";
@@ -31,7 +31,7 @@ function mapsUrl(stop: DeliveryStop) {
 export default function DeliveryPage() {
   const [codes, setCodes] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [input, setInput] = useState("");
+  const [inputs, setInputs] = useState<string[]>(["", "", ""]);
   const [message, setMessage] = useState("");
   const [route, setRoute] = useState<DeliveryRouteResponse | null>(null);
   const [origin, setOrigin] = useState<Coordinates | null>(null);
@@ -127,14 +127,19 @@ export default function DeliveryPage() {
 
   function addCode(event: React.FormEvent) {
     event.preventDefault();
-    const code = input.trim();
-    if (!/^\d{4}$/.test(code)) {
-      setMessage("Ingresa un código de 4 dígitos.");
+    const filled = inputs.map((value) => value.trim()).filter(Boolean);
+    if (filled.length === 0 || filled.some((code) => !/^\d{4}$/.test(code))) {
+      setMessage("Cada código debe tener 4 dígitos. Deja vacías las secciones que no uses.");
       return;
     }
     setMessage("");
-    setInput("");
-    if (!codes.includes(code)) saveCodes([...codes, code]);
+    setInputs(["", "", ""]);
+    const merged = [...new Set([...codes, ...filled])].slice(0, 25);
+    if (merged.length !== codes.length) saveCodes(merged);
+  }
+
+  function updateInput(index: number, value: string) {
+    setInputs((current) => current.map((item, position) => (position === index ? value.replace(/\D/g, "").slice(0, 4) : item)));
   }
 
   function removeCode(code: string) {
@@ -160,36 +165,46 @@ export default function DeliveryPage() {
     setRoute((current) => (current ? { ...current, steps: current.steps.filter((step) => step.type !== "drop" || step.code !== stop.code) } : current));
   }
 
-  const steps = useMemo(() => (codes.length === 0 ? [] : (route?.steps ?? []).filter((step) => step.type === "pickup" || codes.includes(step.code))), [route, codes]);
+  const steps = useMemo(() => (codes.length === 0 ? [] : (route?.steps ?? []).filter((step): step is DropStop => step.type === "drop" && codes.includes(step.code))), [route, codes]);
   const mapPoints = useMemo<MapPoint[]>(() => {
     let drop = 0;
     const points: MapPoint[] = [];
     if (origin) points.push({ ...origin, label: "Tú", kind: "origin" });
     for (const step of steps) {
-      if (step.type === "drop") drop += 1;
+      drop += 1;
       if (step.latitude === null || step.longitude === null) continue;
-      points.push({ latitude: step.latitude, longitude: step.longitude, label: step.type === "pickup" ? "R" : String(drop), kind: step.type });
+      points.push({ latitude: step.latitude, longitude: step.longitude, label: String(drop), kind: "drop" });
     }
     return points;
   }, [steps, origin]);
 
-  const dropNumbers = new Map(steps.filter((step): step is DropStop => step.type === "drop").map((step, index) => [step.code, index + 1]));
+  const dropNumbers = new Map(steps.map((step, index) => [step.code, index + 1]));
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl bg-background p-4 sm:p-6">
       <h1 className="text-2xl font-bold text-dark">Reparto TuPedidos</h1>
-      <p className="mt-1 text-sm text-slate-600">Agrega los códigos de envío de 4 dígitos que te dieron los negocios y te mostraremos la ruta más corta.</p>
+      <p className="mt-1 text-sm text-slate-600">Ingresa un código de envío de 4 dígitos por sección; usa «Agregar más» si llevas más pedidos. La ruta empieza en el negocio y va de la entrega más cercana a la más lejana.</p>
 
-      <form onSubmit={addCode} className="mt-4 flex gap-2">
-        <input
-          value={input}
-          onChange={(event) => setInput(event.target.value.replace(/\D/g, "").slice(0, 4))}
-          inputMode="numeric"
-          placeholder="0000"
-          aria-label="Código de envío"
-          className="h-12 w-32 rounded-xl border border-border bg-white px-4 text-center text-xl font-bold tracking-widest"
-        />
-        <button type="submit" className="h-12 rounded-xl bg-action px-5 font-medium text-white">Agregar código</button>
+      <form onSubmit={addCode} className="mt-4 space-y-3">
+        {inputs.map((value, index) => (
+          <section key={index} className="rounded-2xl border border-border bg-white p-3">
+            <label className="block text-xs font-semibold text-slate-500">
+              Envío {index + 1}
+              <input
+                value={value}
+                onChange={(event) => updateInput(index, event.target.value)}
+                inputMode="numeric"
+                placeholder="0000"
+                aria-label={`Código de envío ${index + 1}`}
+                className="mt-1 block h-12 w-full rounded-xl border border-border bg-white px-4 text-center text-xl font-bold tracking-widest"
+              />
+            </label>
+          </section>
+        ))}
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setInputs((current) => [...current, ""])} disabled={inputs.length >= 25} className="h-12 flex-1 rounded-xl border border-border bg-white px-4 font-medium text-dark disabled:opacity-50">+ Agregar más</button>
+          <button type="submit" className="h-12 flex-1 rounded-xl bg-action px-5 font-medium text-white">Agregar códigos</button>
+        </div>
       </form>
       <label className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-border bg-white p-4">
         <span>
@@ -213,21 +228,12 @@ export default function DeliveryPage() {
       )}
 
       {steps.length > 0 && (
-        <p className="mt-4 text-sm text-slate-600">Ruta sugerida · {steps.filter((step) => step.type === "drop").length} entregas{route && route.distanceKm > 0 ? ` · ≈ ${route.distanceKm} km` : ""}</p>
+        <p className="mt-4 text-sm text-slate-600">Ruta sugerida · {steps.length} entregas{route && route.distanceKm > 0 ? ` · ≈ ${route.distanceKm} km` : ""}</p>
       )}
       {mapPoints.length > 0 && <div className="mt-3"><DeliveryMap points={mapPoints} /></div>}
 
       <ol className="mt-4 space-y-3">
         {steps.map((step) => {
-          if (step.type === "pickup") {
-            return (
-              <li key={`pickup-${step.tenantId}`} className="rounded-2xl border border-dark/20 bg-white p-4">
-                <p className="flex items-center gap-2 font-bold text-dark"><Store size={18} /> Recoger en {step.businessName}</p>
-                {step.address && <p className="mt-1 text-sm text-slate-600">{step.address}</p>}
-                <a href={mapsUrl(step)} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-action"><Navigation size={14} /> Navegar</a>
-              </li>
-            );
-          }
           return (
             <li key={step.code} className="rounded-2xl border border-border bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">

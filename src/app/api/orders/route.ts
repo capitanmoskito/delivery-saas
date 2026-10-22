@@ -53,7 +53,14 @@ export async function GET() {
       orderBy: { createdAt: "desc" }
     });
 
-    return NextResponse.json(orders);
+    const messageCounts = await prisma.orderMessage.groupBy({
+      by: ["orderId"],
+      where: { tenantId: user.tenantId, sender: "customer", orderId: { in: orders.map((order) => order.id) } },
+      _count: { _all: true }
+    });
+    const countByOrder = new Map(messageCounts.map((row) => [row.orderId, row._count._all]));
+
+    return NextResponse.json(orders.map((order) => ({ ...order, customerMessageCount: countByOrder.get(order.id) ?? 0 })));
   } catch (error) {
     console.error("Error fetching orders:", error);
     return NextResponse.json({ error: "No se pudieron cargar los pedidos" }, { status: 500 });

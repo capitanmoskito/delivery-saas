@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import SubscriptionNotice from "@/src/components/billing/subscription-notice";
 import AnnouncementBanner from "@/src/components/dashboard/announcement-banner";
+import PlatformReviewForm from "@/src/components/platform-review-form";
 import SalesDashboard from "@/src/components/dashboard/sales-dashboard";
 import { getCurrentUser } from "@/src/lib/current-user";
 import { prisma } from "@/src/lib/prisma";
@@ -43,6 +44,8 @@ export default async function BusinessDashboardPage() {
       </div>
 
       <SalesDashboard />
+
+      <div className="mt-8 max-w-xl"><PlatformReviewForm title="Evalúa TuPedidos" description="Comparte tu experiencia usando la plataforma. Tu testimonio puede ayudar a otros negocios." /></div>
     </div>
   );
 }

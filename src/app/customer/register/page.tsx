@@ -23,7 +23,9 @@ export default function CustomerRegisterPage() {
 
     password: "",
 
-    promoCode: ""
+    promoCode: "",
+
+    gender: "unspecified"
   });
 
   const [confirmEmail, setConfirmEmail] = useState("");
@@ -122,6 +124,18 @@ export default function CustomerRegisterPage() {
     })
   }
 />
+
+<select
+  className="w-full border p-2"
+  value={form.gender}
+  onChange={(e) => setForm({ ...form, gender: e.target.value })}
+>
+  <option value="unspecified">Género (opcional)</option>
+  <option value="female">Mujer</option>
+  <option value="male">Hombre</option>
+  <option value="unspecified">Prefiero no decirlo</option>
+</select>
+
 
         <input
           placeholder="Correo"

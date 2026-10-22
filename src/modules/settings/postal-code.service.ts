@@ -3,6 +3,7 @@ export interface PostalCodeLookup {
   country: string;
   state: string;
   city: string;
+  municipality: string;
   neighborhoods: string[];
 }
 
@@ -48,7 +49,8 @@ export async function lookupPostalCode(
     postalCode,
     country: "México",
     state: String(data.estado ?? ""),
-    city: String(data.municipio ?? data.ciudad ?? ""),
+    city: String(data.ciudad || data.municipio || ""),
+    municipality: String(data.municipio ?? ""),
     neighborhoods: Array.from(new Set(
       (Array.isArray(data.asentamiento) ? data.asentamiento : [data.asentamiento])
         .map((item) => String(item ?? "").trim())

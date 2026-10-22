@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import OrderChat from "@/src/components/order-chat";
 import TrackingMap from "@/src/components/tracking/tracking-map";
 import { currencySymbols } from "@/src/lib/currency";
 
@@ -86,6 +87,12 @@ export default function OrderTracker({ orders, onChanged }: { orders: TrackedOrd
                 <p className="font-semibold text-dark">Nuestro repartidor entregó tu pedido a: {order.deliveredToName}</p>
                 {order.deliveryConfirmation === "disputed" && (
                   <p className="mt-1 text-sm text-slate-600">Avisamos al negocio que no recibiste tu pedido. Se pondrán en contacto contigo.</p>
+                )}
+                {order.deliveryConfirmation === "disputed" && (
+                  <div className="mt-3">
+                    <p className="mb-2 text-sm font-medium text-dark">Mensajes con el negocio</p>
+                    <OrderChat endpoint="/api/customer/orders/messages" orderId={order.id} self="customer" />
+                  </div>
                 )}
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <button type="button" disabled={busyId === order.id} onClick={() => void respond(order.id, true)} className="flex-1 rounded-full bg-action px-4 py-2.5 font-medium text-white disabled:opacity-60">

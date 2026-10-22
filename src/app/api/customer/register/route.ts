@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
 import { NextResponse } from "next/server";
 
+import { recordUserActivity } from "@/src/lib/user-activity";
 import { prisma } from "@/src/lib/prisma";
 import { validatePassword } from "@/src/lib/password-validator";
 
@@ -13,6 +14,7 @@ export async function POST(request: Request) {
     const lastNameMaternal = String(data.lastNameMaternal ?? "").trim();
     const email = String(data.email ?? "").trim().toLowerCase();
     const password = String(data.password ?? "");
+    const gender = data.gender === "male" || data.gender === "female" ? data.gender : "unspecified";
     const promoCode = String(data.promoCode ?? "").trim().toUpperCase();
     const passwordRules = validatePassword(password);
 
@@ -50,6 +52,7 @@ export async function POST(request: Request) {
         lastNamePaternal,
         lastNameMaternal: lastNameMaternal || null,
         email,
+        gender,
         passwordHash: await bcrypt.hash(password, 12),
         role: "customer"
       }
@@ -59,6 +62,7 @@ export async function POST(request: Request) {
       await prisma.promoCode.update({ where: { id: promoCodeRecord.id }, data: { usedCount: { increment: 1 } } });
     }
 
+    await recordUserActivity(user.id);
     const response = NextResponse.json({ success: true, user: { id: user.id, email: user.email, role: user.role } }, { status: 201 });
     response.cookies.set("saas_user", JSON.stringify({ id: user.id, email: user.email, role: user.role, tenantId: null }), { httpOnly: true, path: "/" });
     return response;

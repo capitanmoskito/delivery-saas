@@ -232,6 +232,7 @@ export async function POST(request: Request) {
       country: String(body.country ?? "").trim() || null,
       state: String(body.state ?? "").trim() || null,
       city: String(body.city ?? "").trim() || null,
+      municipality: String(body.municipality ?? "").trim() || null,
       neighborhood: String(body.neighborhood ?? "").trim() || null,
       addressLine: String(body.addressLine ?? "").trim() || null,
       currency: currencyValue
@@ -272,6 +273,7 @@ export async function POST(request: Request) {
           previousProfile?.country,
           previousProfile?.state,
           previousProfile?.city,
+          previousProfile?.municipality,
           previousProfile?.neighborhood,
           previousProfile?.addressLine
         ]),
@@ -280,6 +282,7 @@ export async function POST(request: Request) {
           profileData.country,
           profileData.state,
           profileData.city,
+          profileData.municipality,
           profileData.neighborhood,
           profileData.addressLine
         ])

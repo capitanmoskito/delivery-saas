@@ -5,7 +5,9 @@ import { createBillingProvider, type BillingProviderName } from "@/src/modules/b
 const SYSTEM_ACTOR = "system";
 const PENDING_REUSE_MS = 30 * 60 * 1000;
 
-export function getMonthlyPrice(): number {
+export async function getMonthlyPrice(): Promise<number> {
+  const settings = await prisma.saaSSettings.findFirst({ select: { subscriptionMonthlyPrice: true } });
+  if (settings?.subscriptionMonthlyPrice && settings.subscriptionMonthlyPrice >= 1) return settings.subscriptionMonthlyPrice;
   const configured = Number(process.env.SUBSCRIPTION_MONTHLY_PRICE);
   return Number.isFinite(configured) && configured >= 1 ? configured : 499;
 }
@@ -42,7 +44,7 @@ export async function getBillingOverview(tenantId: string): Promise<BillingOverv
 
   return {
     tenantStatus: tenant.status,
-    monthlyPrice: tenant.subscription?.monthlyPrice ?? getMonthlyPrice(),
+    monthlyPrice: await getMonthlyPrice(),
     currency: tenant.subscription?.currency ?? "MXN",
     dueDate,
     lastPaymentAt: tenant.subscription?.lastPaymentAt ?? null,
@@ -55,13 +57,13 @@ export async function createSubscriptionCheckout(tenantId: string, customerEmail
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { businessName: true, subscription: true } });
   if (!tenant) throw new Error("Negocio no encontrado.");
 
+  const amount = await getMonthlyPrice();
   const reusable = await prisma.subscriptionPayment.findFirst({
-    where: { tenantId, status: "pending", provider: providerName, checkoutUrl: { not: null }, createdAt: { gte: new Date(Date.now() - PENDING_REUSE_MS) } },
+    where: { tenantId, status: "pending", provider: providerName, amount, checkoutUrl: { not: null }, createdAt: { gte: new Date(Date.now() - PENDING_REUSE_MS) } },
     orderBy: { createdAt: "desc" }
   });
   if (reusable?.checkoutUrl) return { url: reusable.checkoutUrl, paymentId: reusable.id };
 
-  const amount = tenant.subscription?.monthlyPrice ?? getMonthlyPrice();
   const currency = tenant.subscription?.currency ?? "MXN";
   const payment = await prisma.subscriptionPayment.create({ data: { tenantId, amount, currency, provider: providerName } });
 
@@ -125,7 +127,7 @@ export async function syncSubscriptionPayment(where: { id?: string; externalPaym
     await transaction.tenantSubscription.upsert({
       where: { tenantId: payment.tenantId },
       create: { tenantId: payment.tenantId, monthlyPrice: payment.amount, currency: payment.currency, currentPeriodEnd: periodEnd, lastPaymentAt: now },
-      update: { currentPeriodEnd: periodEnd, lastPaymentAt: now }
+      update: { monthlyPrice: payment.amount, currentPeriodEnd: periodEnd, lastPaymentAt: now }
     });
     const nextStatus = tenant.status === "cancelled" ? tenant.status : "active";
     await transaction.tenant.update({ where: { id: payment.tenantId }, data: { status: nextStatus } });

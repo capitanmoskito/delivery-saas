@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { AuthService }
   from "@/src/modules/auth/auth.service";
 
+import { recordUserActivity } from "@/src/lib/user-activity";
 import { sanitizeInput} from "@/src/lib/input-sanitizer";
 
 export async function POST(
@@ -29,6 +30,8 @@ export async function POST(
 
     const user =
       await authService.login(body);
+
+    await recordUserActivity(user.id);
 
     const response =
       NextResponse.json({

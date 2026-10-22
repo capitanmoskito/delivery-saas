@@ -264,7 +264,7 @@ export default function CartPage() {
             </div>
 
             <button type="button" onClick={() => router.push("/checkout")} className="mt-5 w-full rounded-full border border-border px-4 py-3 font-medium text-dark">
-              No gracias, continuar con el pago
+              Continuar al pago
             </button>
           </div>
         </div>

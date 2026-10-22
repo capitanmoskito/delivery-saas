@@ -1,30 +1,17 @@
-import { prisma }
-  from "@/src/lib/prisma";
+import { getMonthlyPrice } from "@/src/modules/billing/subscription.service";
+import SubscriptionPriceForm from "@/src/components/dashboard/subscription-price-form";
+import AnnouncementsManager from "@/src/components/dashboard/announcements-manager";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-
-  const settings =
-    await prisma.saaSSettings.findFirst();
+  const monthlyPrice = await getMonthlyPrice();
 
   return (
-
-    <div className="p-6">
-
-      <h1 className="mb-6 text-2xl font-bold">
-
-        Configuración Global
-      </h1>
-
-      <pre>
-        {JSON.stringify(
-          settings,
-          null,
-          2
-        )}
-      </pre>
-
+    <div className="space-y-8 p-6">
+      <h1 className="text-3xl font-bold">Configuración</h1>
+      <SubscriptionPriceForm initialPrice={monthlyPrice} />
+      <AnnouncementsManager />
     </div>
   );
 }

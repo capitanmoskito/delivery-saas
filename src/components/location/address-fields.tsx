@@ -9,6 +9,7 @@ export type AddressValue = {
   postalCode: string;
   neighborhood: string;
   city: string;
+  municipality?: string;
   state: string;
   country: string;
   reference: string;
@@ -21,6 +22,7 @@ type PostalCodeResponse = {
   country: string;
   state: string;
   city: string;
+  municipality?: string;
   neighborhoods: string[];
   message?: string;
 };
@@ -66,6 +68,7 @@ export default function AddressFields({ value, onChange, includeContact = true, 
       country: data.country || "México",
       state: data.state,
       city: data.city,
+      municipality: data.municipality || data.city,
       neighborhood: nextNeighborhoods.includes(value.neighborhood) ? value.neighborhood : (nextNeighborhoods[0] || "")
     });
     setLocationMessage("");
@@ -107,7 +110,8 @@ export default function AddressFields({ value, onChange, includeContact = true, 
         </select>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <input disabled={disabled} required={requiredFields} className="border p-2 disabled:bg-slate-100" placeholder={`Municipio / ciudad${requiredFields ? " *" : ""}`} value={value.city} onChange={(event) => update("city", event.target.value)} />
+        <input disabled={disabled} required={requiredFields} className="border p-2 disabled:bg-slate-100" placeholder={`Ciudad${requiredFields ? " *" : ""}`} value={value.city} onChange={(event) => update("city", event.target.value)} />
+        <input disabled={disabled} className="border p-2 disabled:bg-slate-100" placeholder="Municipio / alcaldía" value={value.municipality ?? ""} onChange={(event) => update("municipality", event.target.value)} />
         <input disabled={disabled} required={requiredFields} className="border p-2 disabled:bg-slate-100" placeholder={`Estado${requiredFields ? " *" : ""}`} value={value.state} onChange={(event) => update("state", event.target.value)} />
       </div>
       {includeContact && <><input disabled={disabled} className="w-full border p-2 disabled:bg-slate-100" placeholder="Referencia de entrega" value={value.reference} onChange={(event) => update("reference", event.target.value)} /><input disabled={disabled} required={requiredFields} className="w-full border p-2 disabled:bg-slate-100" inputMode={requiredFields ? "numeric" : "tel"} maxLength={requiredFields ? 10 : undefined} placeholder={`Teléfono de contacto${requiredFields ? " *" : ""}`} value={value.contactPhone} onChange={(event) => update("contactPhone", requiredFields ? event.target.value.replace(/\D/g, "").slice(0, 10) : event.target.value)} /></>}

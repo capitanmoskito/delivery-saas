@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import PlatformReviewForm from "@/src/components/platform-review-form";
 import AddressFields, { type AddressValue } from "@/src/components/location/address-fields";
 import MarketplaceHeader from "@/src/components/marketplace-header";
 
@@ -23,7 +24,7 @@ export default function CustomerProfilePage() {
       if (!response.ok) { setError(data.error || "Inicia sesión para ver tu perfil"); return; }
       setFirstName(data.firstName || ""); setLastName(data.lastNamePaternal || ""); setEmail(data.email || "");
       const saved = data.customerAddresses?.[0];
-      if (saved) setAddress({ street: String(saved.street || ""), postalCode: String(saved.postalCode || ""), neighborhood: String(saved.neighborhood || ""), city: String(saved.city || ""), state: String(saved.state || ""), country: String(saved.country || "México"), reference: String(saved.reference || ""), contactPhone: String(saved.contactPhone || ""), latitude: typeof saved.latitude === "number" ? saved.latitude : null, longitude: typeof saved.longitude === "number" ? saved.longitude : null });
+      if (saved) setAddress({ street: String(saved.street || ""), postalCode: String(saved.postalCode || ""), neighborhood: String(saved.neighborhood || ""), city: String(saved.city || ""), municipality: String(saved.municipality || ""), state: String(saved.state || ""), country: String(saved.country || "México"), reference: String(saved.reference || ""), contactPhone: String(saved.contactPhone || ""), latitude: typeof saved.latitude === "number" ? saved.latitude : null, longitude: typeof saved.longitude === "number" ? saved.longitude : null });
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
@@ -71,6 +72,7 @@ export default function CustomerProfilePage() {
             {saving ? "Guardando..." : "Guardar perfil"}
           </button>
         </form>
+        <div className="mt-6"><PlatformReviewForm title="Evalúa tu experiencia de compra" description="Tu opinión nos ayuda a mejorar TuPedidos." /></div>
       </main>
     </>
   );

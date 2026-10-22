@@ -160,6 +160,10 @@ const [city,
   setCity] =
   useState("");
 
+const [municipality,
+  setMunicipality] =
+  useState("");
+
 const [neighborhood,
   setNeighborhood] =
   useState("");
@@ -188,6 +192,7 @@ const [initialProfile,
     country: "México",
     state: "",
     city: "",
+    municipality: "",
     neighborhood: "",
     addressLine: "",
     currency: "MXN",
@@ -288,6 +293,7 @@ const [passwordError,
         setCountry(profile.country || "México");
         setState(profile.state || "");
         setCity(profile.city || "");
+        setMunicipality(profile.municipality || "");
         setNeighborhood(profile.neighborhood || "");
         setAddressLine(profile.addressLine || "");
         setCurrency(profile.currency || "MXN");
@@ -337,6 +343,7 @@ const [passwordError,
           country: profile.country || "México",
           state: profile.state || "",
           city: profile.city || "",
+          municipality: profile.municipality || "",
           neighborhood: profile.neighborhood || "",
           addressLine: profile.addressLine || "",
           currency: profile.currency || "MXN",
@@ -417,6 +424,8 @@ const hasProfileChanges =
     state,
 
     city,
+
+    municipality,
 
     neighborhood,
 
@@ -573,6 +582,7 @@ const hasProfileChanges =
               country,
               state,
               city,
+              municipality,
               neighborhood,
               addressLine,
               currency,
@@ -630,6 +640,7 @@ const hasProfileChanges =
         country,
         state,
         city,
+        municipality,
         neighborhood,
         addressLine,
         currency,
@@ -1404,6 +1415,7 @@ const hasProfileChanges =
         postalCode,
         neighborhood,
         city,
+        municipality,
         state,
         country,
         reference: "",
@@ -1416,6 +1428,7 @@ const hasProfileChanges =
         setPostalCode(address.postalCode);
         setNeighborhood(address.neighborhood);
         setCity(address.city);
+        setMunicipality(address.municipality ?? "");
         setState(address.state);
         setCountry(address.country);
         setLatitude(address.latitude === null ? "" : String(address.latitude));

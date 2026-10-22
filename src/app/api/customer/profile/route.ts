@@ -34,6 +34,7 @@ export async function PUT(request: Request) {
     const postalCode = String(data.postalCode ?? "").trim();
     const neighborhood = String(data.neighborhood ?? "").trim();
     const city = String(data.city ?? "").trim();
+    const municipality = String(data.municipality ?? "").trim() || null;
     const state = String(data.state ?? "").trim();
     const contactPhone = String(data.contactPhone ?? "").replace(/\D/g, "");
     const latitude = data.latitude === null || data.latitude === undefined ? null : Number(data.latitude);
@@ -50,7 +51,7 @@ export async function PUT(request: Request) {
     await prisma.$transaction(async (transaction) => {
       await transaction.user.update({ where: { id: user.id }, data: { firstName, lastNamePaternal: lastName } });
       const address = await transaction.customerAddress.findFirst({ where: { userId: user.id }, orderBy: { updatedAt: "desc" }, select: { id: true } });
-      const addressData = { street, postalCode, neighborhood, city, state, country: String(data.country ?? "México"), reference: String(data.reference ?? "").trim() || null, contactPhone, latitude, longitude };
+      const addressData = { street, postalCode, neighborhood, city, municipality, state, country: String(data.country ?? "México"), reference: String(data.reference ?? "").trim() || null, contactPhone, latitude, longitude };
       if (address) await transaction.customerAddress.update({ where: { id: address.id }, data: addressData });
       else await transaction.customerAddress.create({ data: { userId: user.id, ...addressData } });
     });

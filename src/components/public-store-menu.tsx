@@ -136,12 +136,7 @@ export default function PublicStoreMenu({
   }
 
   function handleProductAdd(product: Product) {
-    if (product.variants.length > 0) {
-      openProduct(product);
-      return;
-    }
-
-    addProductToCart(product, []);
+    openProduct(product);
   }
 
   return (

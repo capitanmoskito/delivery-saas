@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { AlertTriangle, Bell, Volume2, VolumeX } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
+import OrderChat from "@/src/components/order-chat";
 import AddressFields, { type AddressValue } from "@/src/components/location/address-fields";
 
 type Variant = { id: string; name: string; price: number };
@@ -13,11 +14,37 @@ type PackageComplement = { id: string; name: string; price: number };
 type Package = { id: string; name: string; price: number; imageUrl?: string | null; complements: PackageComplement[]; items: Array<{ productId: string; quantity: number }> };
 type Promotion = { id: string; name: string; discountType?: "percentage" | "fixed_amount" | null; discountPercent?: number | null; discountAmount?: number | null; appliesToLocalOrders: boolean; appliesToCash: boolean; appliesToCard: boolean; targetProducts: Array<{ productId: string }>; requiredProducts: Array<{ productId: string; quantity: number }> };
 type OrderStatus = "pending_payment" | "accepted" | "preparing" | "ready_pickup" | "ready_delivery" | "delivered";
-type Order = { deliveryConfirmation?: string | null; deliveredToName?: string | null; deliveryCode?: { code: string; activeCode: string | null; expiresAt: string } | null; id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; paymentMethod: string; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
+type Order = { customerMessageCount?: number; deliveryConfirmation?: string | null; deliveredToName?: string | null; deliveryCode?: { code: string; activeCode: string | null; expiresAt: string } | null; id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; paymentMethod: string; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
 type DraftItem = { productId: string; name: string; quantity: number; additionIds: string[]; additions: Variant[]; total: number };
 type Closure = { orderCount: number; totalAmount: number; onlineOrderCount: number; localOrderCount: number; summary: { busiestHours: Array<{ hour: number; orderCount: number }>; starDishes: Array<{ name: string; quantity: number }>; recurringCustomers: Array<{ name: string; orders: number }> } };
 
 const SOUND_KEY = "orders-sound-enabled";
+const SEEN_MESSAGES_KEY = "orders-seen-message-counts";
+
+function readSeenCounts(): Record<string, number> {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(SEEN_MESSAGES_KEY) || "{}");
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function playAlarm(context: AudioContext) {
+  [660, 440, 660, 440, 660, 440].forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const start = context.currentTime + index * 0.25;
+    oscillator.type = "square";
+    oscillator.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.25, start + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.23);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.24);
+  });
+}
 
 function isNotifiable(order: Order) {
   return order.source === "online" && !(order.status === "pending_payment" && order.paymentMethod !== "transfer");
@@ -47,6 +74,7 @@ export default function OrdersPage() {
   const [packages, setPackages] = useState<Package[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [viewOrderId, setViewOrderId] = useState<string | null>(null);
   const [codeOrderId, setCodeOrderId] = useState<string | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [disputeOrderId, setDisputeOrderId] = useState<string | null>(null);
@@ -73,6 +101,8 @@ export default function OrdersPage() {
   const [error, setError] = useState("");
   const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [seenCounts, setSeenCounts] = useState<Record<string, number>>({});
+  const messageCountsRef = useRef<Map<string, number> | null>(null);
   const knownIdsRef = useRef<Set<string> | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
   const soundRef = useRef(true);
@@ -133,6 +163,8 @@ export default function OrdersPage() {
 
         setProducts(productsData as Product[]);
         seedKnown(ordersData as Order[]);
+        messageCountsRef.current = new Map((ordersData as Order[]).map((order) => [order.id, order.customerMessageCount ?? 0]));
+        setSeenCounts(readSeenCounts());
         setOrders(ordersData as Order[]);
       } catch {
         if (active) {
@@ -171,6 +203,10 @@ export default function OrdersPage() {
         } else {
           seedKnown(list);
         }
+        const previous = messageCountsRef.current;
+        const current = new Map(list.map((order) => [order.id, order.customerMessageCount ?? 0]));
+        if (previous && list.some((order) => (order.customerMessageCount ?? 0) > (previous.get(order.id) ?? 0)) && soundRef.current && audioRef.current) playAlarm(audioRef.current);
+        messageCountsRef.current = current;
         setOrders(list);
       } catch {
         // Next poll retries silently.
@@ -198,6 +234,37 @@ export default function OrdersPage() {
       window.removeEventListener("focus", onVisible);
     };
   }, []);
+
+  const unreadMessageOrders = orders.filter((order) => order.id !== disputeOrderId && (order.customerMessageCount ?? 0) > (seenCounts[order.id] ?? 0));
+
+  function markMessagesSeen(order: Order) {
+    const next = { ...readSeenCounts(), [order.id]: order.customerMessageCount ?? 0 };
+    window.localStorage.setItem(SEEN_MESSAGES_KEY, JSON.stringify(next));
+    setSeenCounts(next);
+  }
+
+  function openDispute(orderId: string) {
+    const order = orders.find((item) => item.id === orderId);
+    if (order) markMessagesSeen(order);
+    setDisputeOrderId(orderId);
+  }
+
+  function closeDispute() {
+    const order = orders.find((item) => item.id === disputeOrderId);
+    if (order) markMessagesSeen(order);
+    setDisputeOrderId(null);
+  }
+
+  useEffect(() => {
+    if (unreadMessageOrders.length === 0) return;
+    const original = document.title;
+    let on = true;
+    const timer = window.setInterval(() => {
+      document.title = on ? "🔴 Mensaje de cliente" : original;
+      on = !on;
+    }, 1000);
+    return () => { window.clearInterval(timer); document.title = original; };
+  }, [unreadMessageOrders.length]);
 
   useEffect(() => {
     if (newOrderIds.length === 0) return;
@@ -362,15 +429,27 @@ export default function OrdersPage() {
         {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />} Sonido {soundEnabled ? "activado" : "silenciado"}
       </button>
     </div>
+    {unreadMessageOrders.length > 0 && (
+      <div role="alert" className="mt-4 flex items-center justify-between gap-3 rounded-xl border-2 border-red-600 bg-red-50 px-4 py-3 text-red-700 animate-pulse">
+        <span className="flex items-center gap-2 font-semibold"><AlertTriangle size={20} className="text-red-600" /> Ups, tienes un mensaje de un cliente, revísalo lo antes posible.</span>
+        <button type="button" onClick={() => openDispute(unreadMessageOrders[0].id)} className="rounded-full bg-red-600 px-4 py-1.5 text-sm font-medium text-white">Ver mensaje</button>
+      </div>
+    )}
     {error && !showForm && <p className="mt-4 text-sm text-red-600">{error}</p>}{closure && <ClosureSummary closure={closure} onClose={() => setClosure(null)} />}
-    <OrdersTable title="Pedidos en línea" highlightIds={newOrderIds} orders={orders.filter((order) => order.source === "online")} onDispute={setDisputeOrderId} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} /><OrdersTable title="Pedidos en local" orders={orders.filter((order) => order.source === "local")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} />
+    <OrdersTable title="Pedidos en línea" highlightIds={newOrderIds} orders={orders.filter((order) => order.source === "online")} onDispute={openDispute} unreadMessageIds={unreadMessageOrders.map((order) => order.id)} onUpdate={updateOrder} onView={(order) => setViewOrderId(order.id)} currentTime={currentTime} /><OrdersTable title="Pedidos en local" orders={orders.filter((order) => order.source === "local")} onUpdate={updateOrder} onEdit={editOrder} currentTime={currentTime} />
+    {viewOrderId && orders.find((order) => order.id === viewOrderId) && <OrderDetailModal order={orders.find((order) => order.id === viewOrderId) as Order} onClose={() => setViewOrderId(null)} />}
     {codeOrder && <DeliveryCodeModal order={codeOrder} confirming={confirmingClose} onAskClose={() => setConfirmingClose(true)} onKeepOpen={() => setConfirmingClose(false)} onClose={() => { setConfirmingClose(false); setCodeOrderId(null); }} />}
-    {disputeOrderId && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-        <div role="alertdialog" aria-modal="true" className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-xl">
-          <AlertTriangle className="mx-auto text-amber-500" size={36} />
-          <p className="mt-3 font-bold text-dark">Cliente menciona que no recibió el pedido, ponte en contacto con tu repartidor para saber detalles y confirma con el cliente.</p>
-          <button type="button" onClick={() => setDisputeOrderId(null)} className="mt-5 w-full rounded-full bg-action px-4 py-2.5 font-medium text-white">Entendido</button>
+    {disputeOrderId && orders.some((order) => order.id === disputeOrderId && order.deliveryConfirmation === "disputed") && (
+      <div className="fixed inset-0 z-50 flex items-end bg-black/60 sm:items-center sm:justify-center">
+        <div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-t-2xl bg-white p-5 shadow-xl sm:rounded-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 shrink-0 text-amber-500" size={22} />
+              <p className="font-bold text-dark">El cliente menciona que no le entregaron. Contáctalo con tu repartidor y aclara el caso por mensaje.</p>
+            </div>
+            <button type="button" onClick={closeDispute} className="text-slate-500">Cerrar</button>
+          </div>
+          <div className="mt-4"><OrderChat endpoint="/api/orders/messages" orderId={disputeOrderId} self="business" /></div>
         </div>
       </div>
     )}
@@ -379,8 +458,37 @@ export default function OrdersPage() {
   </div>;
 }
 
-function OrdersTable({ title, orders, highlightIds = [], onDispute, onUpdate, onEdit, currentTime }: { title: string; orders: Order[]; highlightIds?: string[]; onDispute?: (orderId: string) => void; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void; onEdit: (order: Order) => void; currentTime: number | null }) {
-  return <section className="mt-8"><h2 className="mb-3 text-xl font-semibold">{title}</h2><div className="overflow-x-auto rounded border"><table className="w-full min-w-250 text-left text-sm [&_th:nth-child(5)]:w-36 [&_td:nth-child(5)]:w-36 [&_td:nth-child(5)>div]:min-w-0"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Número</th><th className="p-3">Desde</th><th className="p-3">Cliente</th><th className="p-3">Dirección / mesa</th><th className="p-2">Estatus</th><th className="p-3">Tiempo de entrega</th><th className="p-3">Monto</th></tr></thead><tbody>{orders.map((order) => <Fragment key={order.id}><tr className="border-t"><td colSpan={7} className="p-0"><OrderProgressBar order={order} /></td></tr><tr className={`align-top ${highlightIds.includes(order.id) ? "bg-action/10" : ""}`}><td className="p-3">{order.orderNumber || order.id.slice(0, 8)}{order.deliveryConfirmation === "disputed" && onDispute && <button type="button" onClick={() => onDispute(order.id)} aria-label="Cliente reporta que no recibió el pedido" className="ml-2 inline-flex align-middle text-amber-500"><AlertTriangle size={18} /></button>}</td><td className="p-3">{order.source === "online" ? "En línea" : "En local"}</td><td className="p-3">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</td><td className="p-3"><span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${order.fulfillmentType === "delivery" ? "bg-action/10 text-action" : "bg-slate-100 text-slate-700"}`}>{order.fulfillmentType === "delivery" ? "Para llevar · Envío" : order.fulfillmentType === "dine_in" ? "En local" : "Para recoger"}</span><div>{order.deliveryAddress || (order.tableNumber ? `Mesa ${order.tableNumber}` : "")}</div></td><td className="w-36 p-2"><OrderStatusControls order={order} onUpdate={onUpdate} /></td><td className="p-3"><DeliveryDuration order={order} currentTime={currentTime} /></td><td className="p-3">${order.total.toFixed(2)}<br /><span className="text-xs text-slate-500">{order.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</span>{order.source === "local" && !(order.status === "delivered" && order.paymentStatus === "paid") && <button type="button" onClick={() => onEdit(order)} className="mt-3 block rounded bg-action px-4 py-2 text-sm font-medium text-white">Editar orden</button>}</td></tr></Fragment>)}{orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No hay pedidos.</td></tr>}</tbody></table></div></section>;
+function OrdersTable({ title, orders, highlightIds = [], unreadMessageIds = [], onDispute, onUpdate, onEdit, onView, currentTime }: { title: string; orders: Order[]; highlightIds?: string[]; unreadMessageIds?: string[]; onDispute?: (orderId: string) => void; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void; onEdit?: (order: Order) => void; onView?: (order: Order) => void; currentTime: number | null }) {
+  return <section className="mt-8"><h2 className="mb-3 text-xl font-semibold">{title}</h2><div className="overflow-x-auto rounded border"><table className="w-full min-w-250 text-left text-sm [&_th:nth-child(5)]:w-36 [&_td:nth-child(5)]:w-36 [&_td:nth-child(5)>div]:min-w-0"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Número</th><th className="p-3">Desde</th><th className="p-3">Cliente</th><th className="p-3">Dirección / mesa</th><th className="p-2">Estatus</th><th className="p-3">Tiempo de entrega</th><th className="p-3">Monto</th></tr></thead><tbody>{orders.map((order) => <Fragment key={order.id}><tr className="border-t"><td colSpan={7} className="p-0"><OrderProgressBar order={order} /></td></tr><tr className={`align-top ${highlightIds.includes(order.id) ? "bg-action/10" : ""}`}><td className="p-3">{order.orderNumber || order.id.slice(0, 8)}{order.deliveryConfirmation === "disputed" && onDispute && <button type="button" onClick={() => onDispute(order.id)} className={`mt-2 flex max-w-48 items-start gap-1 rounded border px-2 py-1 text-left text-xs font-medium ${unreadMessageIds.includes(order.id) ? "animate-pulse border-red-600 bg-red-600 text-white" : "border-amber-400 bg-amber-50 text-amber-800"}`}><AlertTriangle size={14} className="mt-0.5 shrink-0" />El cliente menciona que no le entregaron. Revisa el mensaje</button>}</td><td className="p-3">{order.source === "online" ? "En línea" : "En local"}</td><td className="p-3">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</td><td className="p-3"><span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${order.fulfillmentType === "delivery" ? "bg-action/10 text-action" : "bg-slate-100 text-slate-700"}`}>{order.fulfillmentType === "delivery" ? "Para llevar · Envío" : order.fulfillmentType === "dine_in" ? "En local" : "Para recoger"}</span><div>{order.deliveryAddress || (order.tableNumber ? `Mesa ${order.tableNumber}` : "")}</div></td><td className="w-36 p-2"><OrderStatusControls order={order} onUpdate={onUpdate} /></td><td className="p-3"><DeliveryDuration order={order} currentTime={currentTime} /></td><td className="p-3">${order.total.toFixed(2)}<br /><span className="text-xs text-slate-500">{order.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</span>{order.source === "online" && onView && <button type="button" onClick={() => onView(order)} className="mt-3 block rounded border border-action px-4 py-2 text-sm font-medium text-action">Ver orden</button>}{order.source === "local" && onEdit && !(order.status === "delivered" && order.paymentStatus === "paid") && <button type="button" onClick={() => onEdit(order)} className="mt-3 block rounded bg-action px-4 py-2 text-sm font-medium text-white">Editar orden</button>}</td></tr></Fragment>)}{orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No hay pedidos.</td></tr>}</tbody></table></div></section>;
+}
+
+function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40 sm:items-center sm:justify-center">
+      <div role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-dark">Orden {order.orderNumber || order.id.slice(0, 8)}</h2>
+            <p className="text-sm text-slate-600">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-500">Cerrar</button>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded border">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Cant.</th><th className="p-3">Platillo</th><th className="p-3">Adicionales</th><th className="p-3 text-right">Importe</th></tr></thead>
+            <tbody>
+              {order.items.map((item, index) => {
+                const additions = Array.isArray(item.additions) ? item.additions.filter(isVariant) : [];
+                return <tr key={`${item.productId}-${index}`} className="border-t align-top"><td className="p-3">{item.quantity}</td><td className="p-3">{item.product.name}</td><td className="p-3 text-slate-600">{additions.length > 0 ? additions.map((addition) => addition.name).join(", ") : "—"}</td><td className="p-3 text-right">${item.totalPrice.toFixed(2)}</td></tr>;
+              })}
+              {order.items.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-slate-500">Sin productos.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-4 text-right font-semibold">Total: ${order.total.toFixed(2)}</p>
+      </div>
+    </div>
+  );
 }
 
 function DeliveryDuration({ order, currentTime }: { order: Order; currentTime: number | null }) {
@@ -420,7 +528,7 @@ function PendingTransferQueue({ orders, onConfirm }: { orders: Order[]; onConfir
   );
 }
 
-function OrderStatusControls({ order, onUpdate }: { order: Order; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void }) { if (order.source === "local") { return <div className="flex min-w-68 flex-wrap gap-2">{order.status === "preparing" && <motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, order.fulfillmentType === "pickup" ? "ready_pickup" : order.fulfillmentType === "delivery" ? "ready_delivery" : "delivered")} className="rounded border-action bg-action px-4 py-2 text-sm font-medium text-white">En preparación</motion.button>}{order.status === "ready_pickup" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para recoger</button>}{order.status === "ready_delivery" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para envío</button>}{order.status === "delivered" && order.paymentStatus === "pending" && <button type="button" onClick={() => onUpdate(order.id, "delivered", "paid")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Marcar pagada</button>}{order.status === "delivered" && order.paymentStatus === "paid" && <span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Entregada y pagada</span>}</div>; } if (order.status === "pending_payment" && order.paymentMethod === "transfer") { return <div className="flex min-w-68 flex-wrap gap-2"><ShineButton onClick={() => onUpdate(order.id, "accepted", "paid")}>Confirmar transferencia</ShineButton></div>; } const readyStatus: OrderStatus = order.fulfillmentType === "delivery" ? "ready_delivery" : "ready_pickup"; const steps: OrderStatus[] = ["accepted", "preparing", readyStatus, "delivered"]; const currentIndex = steps.indexOf(order.status); if (order.status === "delivered") { return <div className="flex min-w-68 flex-wrap gap-2"><span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">{statusLabels.delivered}</span></div>; } const next = steps[currentIndex + 1]; if (currentIndex < 0 || !next) { return <span className="text-sm text-slate-500">{statusLabels[order.status]}</span>; } return <div className="flex min-w-68 flex-wrap gap-2"><motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, next, next === "delivered" && order.fulfillmentType === "pickup" ? "paid" : undefined)} className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-white">{statusLabels[order.status]}</motion.button></div>; }
+function OrderStatusControls({ order, onUpdate }: { order: Order; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void }) { if (order.source === "local") { return <div className="flex min-w-68 flex-wrap gap-2">{order.status === "preparing" && <motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, order.fulfillmentType === "pickup" ? "ready_pickup" : order.fulfillmentType === "delivery" ? "ready_delivery" : "delivered")} className="rounded border-action bg-action px-4 py-2 text-sm font-medium text-white">En preparación</motion.button>}{order.status === "ready_pickup" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para recoger</button>}{order.status === "ready_delivery" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para envío</button>}{order.status === "delivered" && order.paymentStatus === "pending" && <button type="button" onClick={() => onUpdate(order.id, "delivered", "paid")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Marcar pagada</button>}{order.status === "delivered" && order.paymentStatus === "paid" && <span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Entregada y pagada</span>}</div>; } if (order.status === "pending_payment" && order.paymentMethod === "transfer") { return <div className="flex min-w-68 flex-wrap gap-2"><ShineButton onClick={() => onUpdate(order.id, "accepted", "paid")}>Confirmar transferencia</ShineButton></div>; } const readyStatus: OrderStatus = order.fulfillmentType === "delivery" ? "ready_delivery" : "ready_pickup"; const steps: OrderStatus[] = ["accepted", "preparing", readyStatus, "delivered"]; const currentIndex = steps.indexOf(order.status); if (order.status === "delivered") { return <div className="flex min-w-68 flex-wrap gap-2"><span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">{statusLabels.delivered}</span></div>; } const next = steps[currentIndex + 1]; if (currentIndex < 0 || !next) { return <span className="text-sm text-slate-500">{statusLabels[order.status]}</span>; } return <div className="flex min-w-68 flex-wrap gap-2"><motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, next, next === "delivered" && order.fulfillmentType === "pickup" ? "paid" : undefined)} className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-white">{order.status === "ready_delivery" ? "En ruta" : statusLabels[order.status]}</motion.button></div>; }
 function DeliveryCodeModal({ order, confirming, onAskClose, onKeepOpen, onClose }: { order: Order; confirming: boolean; onAskClose: () => void; onKeepOpen: () => void; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

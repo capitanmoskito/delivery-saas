@@ -142,6 +142,11 @@ const sequence =
       email:
         body.email,
 
+      gender:
+        ["male", "female"].includes(body.gender)
+          ? body.gender
+          : "unspecified",
+
       passwordHash,
 
       role:

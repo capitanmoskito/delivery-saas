@@ -40,6 +40,8 @@ export async function POST(
   const kind =
     data.get("kind") === "banner"
       ? "banner"
+      : data.get("kind") === "announcement"
+      ? "announcement"
       : data.get("kind") === "logo"
         ? "logo"
         : data.get("kind") === "gallery"
@@ -53,6 +55,8 @@ export async function POST(
   const dimensions =
     kind === "banner"
       ? [1600, 900]
+      : kind === "announcement"
+        ? [1600, 120]
       : kind === "logo"
         ? [500, 500]
         : kind === "gallery"

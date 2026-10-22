@@ -49,6 +49,9 @@ export async function GET(request: Request) {
     city:
       result.city,
 
+    municipality:
+      result.municipality,
+
     neighborhoods:
       result.neighborhoods
   });

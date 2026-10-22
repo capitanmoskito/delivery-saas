@@ -122,6 +122,11 @@ model User {
 
   customerProfiles Customer[]
 
+  // male | female | unspecified; null for accounts created before the field existed
+  gender String?
+
+  activityDays UserActivityDay[]
+
   createdAt DateTime @default(now())
 
   updatedAt DateTime @updatedAt
@@ -191,6 +196,8 @@ model BusinessProfile {
 
   city String?
 
+  municipality String?
+
   neighborhood String?
 
   addressLine String?
@@ -257,6 +264,9 @@ model SaaSSettings {
   referredRewardPercent Float @default(15)
 
   maxMonthlyReferralDiscount Float @default(50)
+
+  // Overrides SUBSCRIPTION_MONTHLY_PRICE when set
+  subscriptionMonthlyPrice Float?
 
   createdAt DateTime @default(now())
 
@@ -840,6 +850,8 @@ model CustomerAddress {
 
   city String
 
+  municipality String?
+
   state String
 
   country String @default("México")
@@ -946,6 +958,8 @@ model Order {
   deliveryConfirmation String?
 
   deliveryConfirmedAt DateTime?
+
+  messages OrderMessage[]
 
   @@index([paymentProvider, externalPaymentId])
 
@@ -1293,4 +1307,59 @@ model SalesHourlyStat {
   @@unique([tenantId, date, hour, source])
   @@index([tenantId, year, month])
   @@map("sales_hourly_stats")
+}
+
+model OrderMessage {
+  id String @id @default(uuid())
+
+  tenantId String
+
+  orderId String
+
+  // customer | business
+  sender String
+
+  body String
+
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([orderId, createdAt])
+  @@map("order_messages")
+}
+
+model UserActivityDay {
+  id String @id @default(uuid())
+
+  userId String
+
+  day DateTime @db.Date
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, day])
+  @@index([day])
+  @@map("user_activity_days")
+}
+
+model PlatformReview {
+  id String @id @default(uuid())
+
+  userId String
+
+  authorName String
+
+  rating Int
+
+  comment String?
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId])
+  @@index([createdAt])
+  @@map("platform_reviews")
 }

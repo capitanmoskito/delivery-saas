@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { AlertTriangle, Bell, Volume2, VolumeX } from "lucide-react";
+import { AlertTriangle, Bell, Minus, Plus } from "lucide-react";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 
+import { playChime } from "@/src/lib/alert-sound";
 import OrderChat from "@/src/components/order-chat";
 import AddressFields, { type AddressValue } from "@/src/components/location/address-fields";
 
@@ -14,11 +15,10 @@ type PackageComplement = { id: string; name: string; price: number };
 type Package = { id: string; name: string; price: number; imageUrl?: string | null; complements: PackageComplement[]; items: Array<{ productId: string; quantity: number }> };
 type Promotion = { id: string; name: string; discountType?: "percentage" | "fixed_amount" | null; discountPercent?: number | null; discountAmount?: number | null; appliesToLocalOrders: boolean; appliesToCash: boolean; appliesToCard: boolean; targetProducts: Array<{ productId: string }>; requiredProducts: Array<{ productId: string; quantity: number }> };
 type OrderStatus = "pending_payment" | "accepted" | "preparing" | "ready_pickup" | "ready_delivery" | "delivered";
-type Order = { customerMessageCount?: number; deliveryConfirmation?: string | null; deliveredToName?: string | null; deliveryCode?: { code: string; activeCode: string | null; expiresAt: string } | null; id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; paymentMethod: string; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
+type Order = { customerMessageCount?: number; deliveryConfirmation?: string | null; deliveredToName?: string | null; deliveryCode?: { code: string; activeCode: string | null; expiresAt: string } | null; id: string; orderNumber?: string | null; source: "online" | "local"; fulfillmentType: "pickup" | "delivery" | "dine_in"; paymentStatus: "paid" | "pending"; paymentMethod: string; customerName?: string | null; tableNumber?: string | null; deliveryAddress?: string | null; postalCode?: string | null; neighborhood?: string | null; city?: string | null; state?: string | null; deliveryReference?: string | null; contactPhone?: string | null; latitude?: number | null; longitude?: number | null; acceptedAt?: string | null; preparingAt?: string | null; readyAt?: string | null; paidAt?: string | null; createdAt: string; updatedAt?: string | null; status: OrderStatus; total: number; customer: { firstName: string; lastName: string }; items: Array<{ productId: string; quantity: number; unitPrice: number; totalPrice: number; product: { name: string }; additions?: unknown }> };
 type DraftItem = { productId: string; name: string; quantity: number; additionIds: string[]; additions: Variant[]; total: number };
 type Closure = { orderCount: number; totalAmount: number; onlineOrderCount: number; localOrderCount: number; summary: { busiestHours: Array<{ hour: number; orderCount: number }>; starDishes: Array<{ name: string; quantity: number }>; recurringCustomers: Array<{ name: string; orders: number }> } };
 
-const SOUND_KEY = "orders-sound-enabled";
 const SEEN_MESSAGES_KEY = "orders-seen-message-counts";
 
 function readSeenCounts(): Record<string, number> {
@@ -46,24 +46,12 @@ function playAlarm(context: AudioContext) {
   });
 }
 
-function isNotifiable(order: Order) {
-  return order.source === "online" && !(order.status === "pending_payment" && order.paymentMethod !== "transfer");
+function isClosedOrder(order: Order) {
+  return order.status === "delivered" && order.deliveryConfirmation !== "disputed" && (order.source === "online" || order.paymentStatus === "paid");
 }
 
-function playChime(context: AudioContext) {
-  [880, 1175, 880, 1175].forEach((frequency, index) => {
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const start = context.currentTime + index * 0.22;
-    oscillator.type = "sine";
-    oscillator.frequency.value = frequency;
-    gain.gain.setValueAtTime(0.0001, start);
-    gain.gain.exponentialRampToValueAtTime(0.35, start + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.2);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start(start);
-    oscillator.stop(start + 0.21);
-  });
+function isNotifiable(order: Order) {
+  return order.source === "online" && !(order.status === "pending_payment" && order.paymentMethod !== "transfer");
 }
 
 const statusLabels: Record<OrderStatus, string> = { pending_payment: "Pago pendiente", accepted: "Orden aceptada", preparing: "En preparación", ready_pickup: "Lista para recoger", ready_delivery: "Lista para envío", delivered: "Entregada" };
@@ -85,27 +73,24 @@ export default function OrdersPage() {
   const [fulfillmentType, setFulfillmentType] = useState<"pickup" | "delivery" | "dine_in">("pickup");
   const [deliveryLocation, setDeliveryLocation] = useState<AddressValue>(emptyDeliveryAddress);
   const [selectedProductId, setSelectedProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");
+  const [quantity, setQuantity] = useState(1);
   const [additionIds, setAdditionIds] = useState<string[]>([]);
   const [items, setItems] = useState<DraftItem[]>([]);
   const [packageSelections, setPackageSelections] = useState<Array<{ packageId: string; name: string; price: number; quantity: number; complementIds: string[]; complements: PackageComplement[] }>>([]);
   const [selectedPackageId, setSelectedPackageId] = useState("");
   const [packageComplementIds, setPackageComplementIds] = useState<string[]>([]);
-  const [packageQuantity, setPackageQuantity] = useState("1");
+  const [packageQuantity, setPackageQuantity] = useState(1);
   const [promotionIds, setPromotionIds] = useState<string[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card">("cash");
   const [currentTime, setCurrentTime] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [closing, setClosing] = useState(false);
   const [closure, setClosure] = useState<Closure | null>(null);
   const [error, setError] = useState("");
   const [newOrderIds, setNewOrderIds] = useState<string[]>([]);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [seenCounts, setSeenCounts] = useState<Record<string, number>>({});
   const messageCountsRef = useRef<Map<string, number> | null>(null);
   const knownIdsRef = useRef<Set<string> | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
-  const soundRef = useRef(true);
 
   function seedKnown(list: Order[]) {
     const known = knownIdsRef.current ?? new Set<string>();
@@ -117,14 +102,6 @@ export default function OrdersPage() {
     if (!audioRef.current && typeof window !== "undefined" && "AudioContext" in window) audioRef.current = new AudioContext();
     if (audioRef.current?.state === "suspended") void audioRef.current.resume();
     return audioRef.current;
-  }
-
-  function toggleSound() {
-    const next = !soundRef.current;
-    soundRef.current = next;
-    setSoundEnabled(next);
-    window.localStorage.setItem(SOUND_KEY, next ? "1" : "0");
-    if (next) { const context = ensureAudio(); if (context) playChime(context); }
   }
 
   async function loadData() {
@@ -181,6 +158,17 @@ export default function OrdersPage() {
   }, []);
 
   useEffect(() => {
+    if (newOrderIds.length === 0) return;
+
+    const context = ensureAudio();
+    if (!context) return;
+
+    playChime(context);
+    const timer = window.setInterval(() => playChime(context), 1200);
+    return () => window.clearInterval(timer);
+  }, [newOrderIds.length]);
+
+  useEffect(() => {
     let active = true;
     let inFlight = false;
 
@@ -198,14 +186,13 @@ export default function OrdersPage() {
           if (fresh.length > 0) {
             fresh.forEach((order) => known.add(order.id));
             setNewOrderIds((current) => [...current, ...fresh.map((order) => order.id)]);
-            if (soundRef.current && audioRef.current) playChime(audioRef.current);
           }
         } else {
           seedKnown(list);
         }
         const previous = messageCountsRef.current;
         const current = new Map(list.map((order) => [order.id, order.customerMessageCount ?? 0]));
-        if (previous && list.some((order) => (order.customerMessageCount ?? 0) > (previous.get(order.id) ?? 0)) && soundRef.current && audioRef.current) playAlarm(audioRef.current);
+        if (previous && list.some((order) => (order.customerMessageCount ?? 0) > (previous.get(order.id) ?? 0)) && audioRef.current) playAlarm(audioRef.current);
         messageCountsRef.current = current;
         setOrders(list);
       } catch {
@@ -215,9 +202,6 @@ export default function OrdersPage() {
       }
     }
 
-    const stored = window.localStorage.getItem(SOUND_KEY) !== "0";
-    soundRef.current = stored;
-    const soundTimer = window.setTimeout(() => setSoundEnabled(stored), 0);
     const unlockAudio = () => { ensureAudio(); };
     document.addEventListener("pointerdown", unlockAudio, { once: true });
     const timer = window.setInterval(() => void pollOrders(), 8000);
@@ -227,7 +211,6 @@ export default function OrdersPage() {
 
     return () => {
       active = false;
-      window.clearTimeout(soundTimer);
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
       document.removeEventListener("pointerdown", unlockAudio);
@@ -320,8 +303,8 @@ export default function OrdersPage() {
   }, 0));
   const formTotal = Math.max(0, formSubtotal - promotionDiscount);
 
-  function resetLine() { setSelectedProductId(""); setQuantity("1"); setAdditionIds([]); }
-  function resetOrder() { setCustomerName(""); setTableNumber(""); setFulfillmentType("pickup"); setDeliveryLocation(emptyDeliveryAddress); setItems([]); setPackageSelections([]); setSelectedPackageId(""); setPackageComplementIds([]); setPackageQuantity("1"); setPromotionIds([]); setPaymentMethod("cash"); resetLine(); setEditingOrderId(null); setShowForm(false); setError(""); }
+  function resetLine() { setSelectedProductId(""); setQuantity(1); setAdditionIds([]); }
+  function resetOrder() { setCustomerName(""); setTableNumber(""); setFulfillmentType("pickup"); setDeliveryLocation(emptyDeliveryAddress); setItems([]); setPackageSelections([]); setSelectedPackageId(""); setPackageComplementIds([]); setPackageQuantity(1); setPromotionIds([]); resetLine(); setEditingOrderId(null); setShowForm(false); setError(""); }
 
   function editOrder(order: Order) {
     setCustomerName(order.customerName || "");
@@ -340,7 +323,7 @@ export default function OrdersPage() {
 
   function addProductToOrder() {
     if (!selectedProduct) { setError("Selecciona un producto"); return; }
-    const itemQuantity = Number(quantity);
+    const itemQuantity = quantity;
     if (!Number.isInteger(itemQuantity) || itemQuantity < 1) { setError("La cantidad debe ser mayor a cero"); return; }
     const additions = selectedProduct.variants.filter((variant) => additionIds.includes(variant.id));
     const unitPrice = selectedProduct.price + additions.reduce((total, addition) => total + addition.price, 0);
@@ -351,17 +334,17 @@ export default function OrdersPage() {
 
   function addPackageToOrder() {
     if (!selectedPackage) { setError("Selecciona un paquete"); return; }
-    const itemQuantity = Number(packageQuantity);
+    const itemQuantity = packageQuantity;
     if (!Number.isInteger(itemQuantity) || itemQuantity < 1) { setError("La cantidad debe ser mayor a cero"); return; }
     const complements = selectedPackage.complements.filter((complement) => packageComplementIds.includes(complement.id));
     setPackageSelections((current) => [...current, { packageId: selectedPackage.id, name: selectedPackage.name, price: selectedPackage.price, quantity: itemQuantity, complementIds: packageComplementIds, complements }]);
-    setSelectedPackageId(""); setPackageComplementIds([]); setPackageQuantity("1"); setError("");
+    setSelectedPackageId(""); setPackageComplementIds([]); setPackageQuantity(1); setError("");
   }
 
   async function createOrder() {
     setError(""); setSaving(true);
     try {
-      const response = await fetch("/api/orders", { method: editingOrderId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingOrderId, source: "local", customerName, tableNumber, fulfillmentType, paymentMethod, promotionIds, packages: packageSelections.map(({ packageId, quantity: itemQuantity, complementIds }) => ({ packageId, quantity: itemQuantity, complementIds })), deliveryAddress: deliveryLocation.street, postalCode: deliveryLocation.postalCode, neighborhood: deliveryLocation.neighborhood, city: deliveryLocation.city, state: deliveryLocation.state, deliveryReference: deliveryLocation.reference, contactPhone: deliveryLocation.contactPhone, latitude: deliveryLocation.latitude, longitude: deliveryLocation.longitude, items: items.map(({ productId, quantity: itemQuantity, additionIds: itemAdditionIds }) => ({ productId, quantity: itemQuantity, additionIds: itemAdditionIds })) }) });
+      const response = await fetch("/api/orders", { method: editingOrderId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingOrderId, source: "local", customerName, tableNumber, fulfillmentType, paymentMethod: "cash", promotionIds, packages: packageSelections.map(({ packageId, quantity: itemQuantity, complementIds }) => ({ packageId, quantity: itemQuantity, complementIds })), deliveryAddress: deliveryLocation.street, postalCode: deliveryLocation.postalCode, neighborhood: deliveryLocation.neighborhood, city: deliveryLocation.city, state: deliveryLocation.state, deliveryReference: deliveryLocation.reference, contactPhone: deliveryLocation.contactPhone, latitude: deliveryLocation.latitude, longitude: deliveryLocation.longitude, items: items.map(({ productId, quantity: itemQuantity, additionIds: itemAdditionIds }) => ({ productId, quantity: itemQuantity, additionIds: itemAdditionIds })) }) });
       const data: { error?: string } = await response.json();
       if (!response.ok) { setError(data.error || "No se pudo crear la orden"); return; }
       resetOrder(); await loadData();
@@ -405,16 +388,15 @@ export default function OrdersPage() {
         </div>
         {fulfillmentType === "delivery" && <AddressFields value={deliveryLocation} onChange={setDeliveryLocation} />}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Forma de pago<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value as "cash" | "card")} className="mt-1 block w-full border p-2"><option value="cash">Efectivo</option><option value="card">Tarjeta</option></select></label></div>
-      <div className="rounded border p-4"><h3 className="font-semibold">Promociones aplicables manualmente</h3><div className="mt-3 space-y-2">{promotions.filter((promotion) => promotion.appliesToLocalOrders && (paymentMethod === "cash" ? promotion.appliesToCash : promotion.appliesToCard)).map((promotion) => <label key={promotion.id} className="flex items-center gap-2 rounded border p-2"><input type="checkbox" checked={promotionIds.includes(promotion.id)} onChange={(event) => setPromotionIds((current) => event.target.checked ? [...current, promotion.id] : current.filter((id) => id !== promotion.id))} /><span>{promotion.name}</span><span className="text-sm text-slate-500">{promotion.discountType === "percentage" ? `${promotion.discountPercent || 0}%` : promotion.discountType === "fixed_amount" ? `$${(promotion.discountAmount || 0).toFixed(2)}` : "Regalo"}</span></label>)}{promotions.length === 0 && <p className="text-sm text-slate-500">No hay promociones disponibles.</p>}</div></div>
+      <div className="rounded border p-4"><h3 className="font-semibold">Promociones aplicables manualmente</h3><div className="mt-3 space-y-2">{promotions.filter((promotion) => promotion.appliesToLocalOrders && promotion.appliesToCash).map((promotion) => <label key={promotion.id} className="flex items-center gap-2 rounded border p-2"><input type="checkbox" checked={promotionIds.includes(promotion.id)} onChange={(event) => setPromotionIds((current) => event.target.checked ? [...current, promotion.id] : current.filter((id) => id !== promotion.id))} /><span>{promotion.name}</span><span className="text-sm text-slate-500">{promotion.discountType === "percentage" ? `${promotion.discountPercent || 0}%` : promotion.discountType === "fixed_amount" ? `$${(promotion.discountAmount || 0).toFixed(2)}` : "Regalo"}</span></label>)}{promotions.length === 0 && <p className="text-sm text-slate-500">No hay promociones disponibles.</p>}</div></div>
       <div className="space-y-3 rounded border p-4">
         <h3 className="font-semibold">Agregar producto</h3>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {products.map((product) => <button key={product.id} type="button" onClick={() => { setSelectedProductId(product.id); setAdditionIds([]); }} className={`overflow-hidden rounded border text-left ${selectedProductId === product.id ? "border-action ring-2 ring-action/30" : "bg-white"}`}><div className="relative aspect-square w-full bg-slate-100">{product.imageUrl ? <Image src={product.imageUrl} alt={product.name} fill unoptimized className="object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-500">Sin imagen</div>}</div><div className="p-2"><p className="truncate text-sm font-medium">{product.name}</p><p className="text-sm text-slate-500">${product.price.toFixed(2)}</p></div></button>)}
         </div>
         {selectedProduct && selectedProduct.variants.length > 0 && <div><p className="mb-2 text-sm font-medium">Adicionales</p><div className="grid gap-2 sm:grid-cols-2">{selectedProduct.variants.map((variant) => <label key={variant.id} className="flex items-center gap-2 rounded border p-2 text-sm"><input type="checkbox" checked={additionIds.includes(variant.id)} onChange={(event) => setAdditionIds((current) => event.target.checked ? [...current, variant.id] : current.filter((id) => id !== variant.id))} />{variant.name}{variant.price > 0 ? ` (+$${variant.price.toFixed(2)})` : ""}</label>)}</div></div>}
-        {selectedProduct && <div className="flex flex-col gap-3 sm:flex-row sm:items-end"><label className="block text-sm font-medium">Cantidad<input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="mt-1 block w-full border p-2 sm:w-32" /></label><button type="button" onClick={addProductToOrder} className="rounded border bg-action px-4 py-2 text-white">Guardar producto</button></div>}</div>
-      <div className="rounded border p-4"><h3 className="font-semibold">Agregar paquete</h3><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{packages.map((item) => <button key={item.id} type="button" onClick={() => { setSelectedPackageId(item.id); setPackageComplementIds([]); }} className={`overflow-hidden rounded border text-left ${selectedPackageId === item.id ? "border-action ring-2 ring-action/30" : "bg-white"}`}><div className="relative aspect-square bg-slate-100">{item.imageUrl ? <Image src={item.imageUrl} alt={item.name} fill unoptimized className="object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-500">Sin imagen</div>}</div><div className="p-2"><p className="truncate text-sm font-medium">{item.name}</p><p className="text-sm text-slate-500">${item.price.toFixed(2)}</p></div></button>)}</div>{selectedPackage && <div className="mt-4 space-y-3 border-t pt-4"><p className="font-medium">Complementos de {selectedPackage.name}</p>{selectedPackage.complements.length > 0 ? <div className="grid gap-2 sm:grid-cols-2">{selectedPackage.complements.map((complement) => <label key={complement.id} className="flex items-center gap-2 rounded border p-2 text-sm"><input type="checkbox" checked={packageComplementIds.includes(complement.id)} onChange={(event) => setPackageComplementIds((current) => event.target.checked ? [...current, complement.id] : current.filter((id) => id !== complement.id))} />{complement.name}{complement.price > 0 ? ` (+$${complement.price.toFixed(2)})` : ""}</label>)}</div> : <p className="text-sm text-slate-500">Este paquete no tiene complementos.</p>}<div className="flex flex-col gap-3 sm:flex-row sm:items-end"><label className="text-sm font-medium">Cantidad<input type="number" min="1" value={packageQuantity} onChange={(event) => setPackageQuantity(event.target.value)} className="mt-1 block w-full border p-2 sm:w-32" /></label><button type="button" onClick={addPackageToOrder} className="rounded bg-action px-4 py-2 text-white">Agregar paquete</button></div></div>}</div>
+        {selectedProduct && <div className="flex flex-col gap-3 sm:flex-row sm:items-end"><QuantitySelector value={quantity} onChange={setQuantity} /><button type="button" onClick={addProductToOrder} className="min-h-12 rounded border bg-action px-4 py-2 font-medium text-white">Guardar producto</button></div>}</div>
+      <div className="rounded border p-4"><h3 className="font-semibold">Agregar paquete</h3><div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{packages.map((item) => <button key={item.id} type="button" onClick={() => { setSelectedPackageId(item.id); setPackageComplementIds([]); }} className={`overflow-hidden rounded border text-left ${selectedPackageId === item.id ? "border-action ring-2 ring-action/30" : "bg-white"}`}><div className="relative aspect-square bg-slate-100">{item.imageUrl ? <Image src={item.imageUrl} alt={item.name} fill unoptimized className="object-cover" /> : <div className="flex h-full items-center justify-center text-xs text-slate-500">Sin imagen</div>}</div><div className="p-2"><p className="truncate text-sm font-medium">{item.name}</p><p className="text-sm text-slate-500">${item.price.toFixed(2)}</p></div></button>)}</div>{selectedPackage && <div className="mt-4 space-y-3 border-t pt-4"><p className="font-medium">Complementos de {selectedPackage.name}</p>{selectedPackage.complements.length > 0 ? <div className="grid gap-2 sm:grid-cols-2">{selectedPackage.complements.map((complement) => <label key={complement.id} className="flex items-center gap-2 rounded border p-2 text-sm"><input type="checkbox" checked={packageComplementIds.includes(complement.id)} onChange={(event) => setPackageComplementIds((current) => event.target.checked ? [...current, complement.id] : current.filter((id) => id !== complement.id))} />{complement.name}{complement.price > 0 ? ` (+$${complement.price.toFixed(2)})` : ""}</label>)}</div> : <p className="text-sm text-slate-500">Este paquete no tiene complementos.</p>}<div className="flex flex-col gap-3 sm:flex-row sm:items-end"><QuantitySelector value={packageQuantity} onChange={setPackageQuantity} /><button type="button" onClick={addPackageToOrder} className="min-h-12 rounded bg-action px-4 py-2 font-medium text-white">Agregar paquete</button></div></div>}</div>
       {packageSelections.length > 0 && <div className="rounded border p-4"><h3 className="font-semibold">Paquetes de la orden</h3>{packageSelections.map((item, index) => <div key={`${item.packageId}-${index}`} className="mt-2 flex justify-between gap-3 text-sm"><div><p>{item.quantity}x {item.name}</p>{item.complements.length > 0 && <p className="text-slate-500">{item.complements.map((complement) => complement.name).join(", ")}</p>}</div><div className="flex items-center gap-3"><span className="font-medium">${((item.price + item.complements.reduce((total, complement) => total + complement.price, 0)) * item.quantity).toFixed(2)}</span><button type="button" onClick={() => setPackageSelections((current) => current.filter((_, selectionIndex) => selectionIndex !== index))} className="text-red-600">Quitar</button></div></div>)}</div>}
       {(items.length > 0 || packageSelections.length > 0) && <div className="rounded border p-4"><h3 className="font-semibold">Productos de la orden</h3><div className="mt-3 space-y-2">{items.map((item, index) => <div key={`${item.productId}-${index}`} className="flex items-start justify-between gap-3 border-b pb-2 text-sm"><div><p>{item.quantity}x {item.name}</p>{item.additions.length > 0 && <p className="text-slate-500">{item.additions.map((addition) => addition.name).join(", ")}</p>}</div><div className="flex items-center gap-3"><span>${item.total.toFixed(2)}</span><button type="button" onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="text-red-600">Quitar</button></div></div>)}</div><div className="mt-3 space-y-1 text-right"><p>Subtotal: ${formSubtotal.toFixed(2)}</p>{promotionDiscount > 0 && <p className="text-action">Promociones: -${promotionDiscount.toFixed(2)}</p>}<p className="font-semibold">Monto: ${formTotal.toFixed(2)}</p></div></div>}
       {error && <p className="text-sm text-red-600">{error}</p>}<div><button type="button" onClick={createOrder} disabled={saving || (items.length === 0 && packageSelections.length === 0)} className="rounded bg-action px-4 py-2 text-white disabled:bg-gray-400">{saving ? "Guardando..." : editingOrderId ? "Guardar cambios" : "Guardar orden completa"}</button><button type="button" onClick={resetOrder} className="ml-2 rounded border px-4 py-2">Cancelar</button></div></section>}
@@ -425,9 +407,6 @@ export default function OrdersPage() {
           <button type="button" onClick={() => setNewOrderIds([])} className="rounded-full bg-action px-4 py-1.5 text-sm font-medium text-white">Entendido</button>
         </div>
       ) : <span />}
-      <button type="button" onClick={toggleSound} aria-pressed={soundEnabled} className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-sm text-slate-600">
-        {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />} Sonido {soundEnabled ? "activado" : "silenciado"}
-      </button>
     </div>
     {unreadMessageOrders.length > 0 && (
       <div role="alert" className="mt-4 flex items-center justify-between gap-3 rounded-xl border-2 border-red-600 bg-red-50 px-4 py-3 text-red-700 animate-pulse">
@@ -458,8 +437,174 @@ export default function OrdersPage() {
   </div>;
 }
 
-function OrdersTable({ title, orders, highlightIds = [], unreadMessageIds = [], onDispute, onUpdate, onEdit, onView, currentTime }: { title: string; orders: Order[]; highlightIds?: string[]; unreadMessageIds?: string[]; onDispute?: (orderId: string) => void; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void; onEdit?: (order: Order) => void; onView?: (order: Order) => void; currentTime: number | null }) {
-  return <section className="mt-8"><h2 className="mb-3 text-xl font-semibold">{title}</h2><div className="overflow-x-auto rounded border"><table className="w-full min-w-250 text-left text-sm [&_th:nth-child(5)]:w-36 [&_td:nth-child(5)]:w-36 [&_td:nth-child(5)>div]:min-w-0"><thead className="bg-slate-50 text-slate-600"><tr><th className="p-3">Número</th><th className="p-3">Desde</th><th className="p-3">Cliente</th><th className="p-3">Dirección / mesa</th><th className="p-2">Estatus</th><th className="p-3">Tiempo de entrega</th><th className="p-3">Monto</th></tr></thead><tbody>{orders.map((order) => <Fragment key={order.id}><tr className="border-t"><td colSpan={7} className="p-0"><OrderProgressBar order={order} /></td></tr><tr className={`align-top ${highlightIds.includes(order.id) ? "bg-action/10" : ""}`}><td className="p-3">{order.orderNumber || order.id.slice(0, 8)}{order.deliveryConfirmation === "disputed" && onDispute && <button type="button" onClick={() => onDispute(order.id)} className={`mt-2 flex max-w-48 items-start gap-1 rounded border px-2 py-1 text-left text-xs font-medium ${unreadMessageIds.includes(order.id) ? "animate-pulse border-red-600 bg-red-600 text-white" : "border-amber-400 bg-amber-50 text-amber-800"}`}><AlertTriangle size={14} className="mt-0.5 shrink-0" />El cliente menciona que no le entregaron. Revisa el mensaje</button>}</td><td className="p-3">{order.source === "online" ? "En línea" : "En local"}</td><td className="p-3">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</td><td className="p-3"><span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${order.fulfillmentType === "delivery" ? "bg-action/10 text-action" : "bg-slate-100 text-slate-700"}`}>{order.fulfillmentType === "delivery" ? "Para llevar · Envío" : order.fulfillmentType === "dine_in" ? "En local" : "Para recoger"}</span><div>{order.deliveryAddress || (order.tableNumber ? `Mesa ${order.tableNumber}` : "")}</div></td><td className="w-36 p-2"><OrderStatusControls order={order} onUpdate={onUpdate} /></td><td className="p-3"><DeliveryDuration order={order} currentTime={currentTime} /></td><td className="p-3">${order.total.toFixed(2)}<br /><span className="text-xs text-slate-500">{order.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</span>{order.source === "online" && onView && <button type="button" onClick={() => onView(order)} className="mt-3 block rounded border border-action px-4 py-2 text-sm font-medium text-action">Ver orden</button>}{order.source === "local" && onEdit && !(order.status === "delivered" && order.paymentStatus === "paid") && <button type="button" onClick={() => onEdit(order)} className="mt-3 block rounded bg-action px-4 py-2 text-sm font-medium text-white">Editar orden</button>}</td></tr></Fragment>)}{orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No hay pedidos.</td></tr>}</tbody></table></div></section>;
+function QuantitySelector({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <div>
+      <p className="mb-1 text-sm font-medium">Cantidad</p>
+      <div className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white p-1">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(1, value - 1))}
+          disabled={value <= 1}
+          aria-label="Quitar una unidad"
+          className="flex min-h-12 min-w-12 items-center justify-center rounded-md text-dark transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-300"
+        >
+          <Minus size={20} aria-hidden="true" />
+        </button>
+        <output aria-live="polite" aria-label="Cantidad seleccionada" className="min-w-10 text-center text-lg font-semibold tabular-nums text-dark">
+          {value}
+        </output>
+        <button
+          type="button"
+          onClick={() => onChange(value + 1)}
+          aria-label="Agregar una unidad"
+          className="flex min-h-12 min-w-12 items-center justify-center rounded-md bg-action text-white transition-colors hover:bg-action/90"
+        >
+          <Plus size={20} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OrdersTable({ title, orders: allOrders, highlightIds = [], unreadMessageIds = [], onDispute, onUpdate, onEdit, onView, currentTime }: { title: string; orders: Order[]; highlightIds?: string[]; unreadMessageIds?: string[]; onDispute?: (orderId: string) => void; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void; onEdit?: (order: Order) => void; onView?: (order: Order) => void; currentTime: number | null }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyOrderId, setHistoryOrderId] = useState<string | null>(null);
+  const history = allOrders.filter(isClosedOrder).sort((a, b) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime());
+  const orders = allOrders.filter((order) => !isClosedOrder(order));
+  const historyOrder = history.find((order) => order.id === historyOrderId) ?? null;
+
+  return (
+    <section className="mt-8 min-w-0">
+      <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+        <h2 className="min-w-0 break-words text-xl font-semibold">{title}</h2>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">{orders.length}</span>
+      </div>
+      <div className="min-w-0 space-y-3 md:hidden">
+        {orders.length === 0 ? (
+          <p className="rounded-xl border bg-white p-5 text-center text-sm text-slate-500">No hay pedidos.</p>
+        ) : orders.map((order) => (
+          <article key={order.id} className={`overflow-hidden rounded-xl border bg-white shadow-sm ${highlightIds.includes(order.id) ? "border-action ring-1 ring-action/30" : "border-slate-200"}`}>
+            <div className="min-w-0 space-y-4 p-3 sm:p-4">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Pedido</p>
+                  <h3 className="break-all font-bold text-dark">{order.orderNumber || order.id.slice(0, 8)}</h3>
+                  <p className="mt-1 break-words text-sm text-slate-700">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</p>
+                </div>
+                <div className="ml-auto min-w-0 max-w-full text-right">
+                  <p className="text-lg font-bold text-dark">${order.total.toFixed(2)}</p>
+                  <span className={`inline-block max-w-full whitespace-normal break-words rounded-full px-2.5 py-1 text-xs font-semibold ${order.paymentStatus === "paid" ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-800"}`}>
+                    {order.paymentStatus === "paid" ? "Pagado" : "Pago pendiente"}
+                  </span>
+                </div>
+              </div>
+
+              {order.deliveryConfirmation === "disputed" && onDispute && (
+                <button type="button" onClick={() => onDispute(order.id)} className={`flex min-h-11 w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-medium ${unreadMessageIds.includes(order.id) ? "animate-pulse border-red-600 bg-red-600 text-white" : "border-amber-400 bg-amber-50 text-amber-800"}`}>
+                  <AlertTriangle size={18} className="shrink-0" />
+                  El cliente menciona que no le entregaron. Revisa el mensaje
+                </button>
+              )}
+
+              <div className="grid min-w-0 gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Entrega</p>
+                  <span className={`mt-1 inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${order.fulfillmentType === "delivery" ? "bg-action/10 text-action" : "bg-white text-slate-700"}`}>
+                    {order.fulfillmentType === "delivery" ? "Para llevar · Envío" : order.fulfillmentType === "dine_in" ? "En local" : "Para recoger"}
+                  </span>
+                  {(order.deliveryAddress || order.tableNumber) && <p className="mt-1 break-words text-sm text-slate-700">{order.deliveryAddress || `Mesa ${order.tableNumber}`}</p>}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tiempo de entrega</p>
+                  <p className="mt-1 text-sm"><DeliveryDuration order={order} currentTime={currentTime} /></p>
+                </div>
+              </div>
+
+              <OrderProgressBar order={order} />
+
+              <div className="min-w-0 [&_button]:min-h-11 [&_button]:w-full [&_div]:min-w-0">
+                <OrderStatusControls order={order} onUpdate={onUpdate} />
+              </div>
+
+              {order.source === "online" && onView && (
+                <button type="button" onClick={() => onView(order)} className="min-h-11 w-full rounded-lg border border-action px-4 py-2 text-sm font-semibold text-action">
+                  Ver orden
+                </button>
+              )}
+              {order.source === "local" && onEdit && !(order.status === "delivered" && order.paymentStatus === "paid") && (
+                <button type="button" onClick={() => onEdit(order)} className="min-h-11 w-full rounded-lg bg-action px-4 py-2 text-sm font-semibold text-white">
+                  Editar orden
+                </button>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="hidden min-w-0 overflow-x-auto rounded border md:block">
+        <table className="w-full min-w-250 text-left text-sm [&_th:nth-child(5)]:w-36 [&_td:nth-child(5)]:w-36 [&_td:nth-child(5)>div]:min-w-0">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr><th className="p-3">Número</th><th className="p-3">Desde</th><th className="p-3">Cliente</th><th className="p-3">Dirección / mesa</th><th className="p-2">Estatus</th><th className="p-3">Tiempo de entrega</th><th className="p-3">Monto</th></tr>
+          </thead>
+          <tbody>
+            {orders.map((order) => (
+              <Fragment key={order.id}>
+                <tr className="border-t"><td colSpan={7} className="p-0"><OrderProgressBar order={order} /></td></tr>
+                <tr className={`align-top ${highlightIds.includes(order.id) ? "bg-action/10" : ""}`}>
+                  <td className="p-3">
+                    {order.orderNumber || order.id.slice(0, 8)}
+                    {order.deliveryConfirmation === "disputed" && onDispute && <button type="button" onClick={() => onDispute(order.id)} className={`mt-2 flex max-w-48 items-start gap-1 rounded border px-2 py-1 text-left text-xs font-medium ${unreadMessageIds.includes(order.id) ? "animate-pulse border-red-600 bg-red-600 text-white" : "border-amber-400 bg-amber-50 text-amber-800"}`}><AlertTriangle size={14} className="mt-0.5 shrink-0" />El cliente menciona que no le entregaron. Revisa el mensaje</button>}
+                  </td>
+                  <td className="p-3">{order.source === "online" ? "En línea" : "En local"}</td>
+                  <td className="p-3">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</td>
+                  <td className="p-3"><span className={`mb-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${order.fulfillmentType === "delivery" ? "bg-action/10 text-action" : "bg-slate-100 text-slate-700"}`}>{order.fulfillmentType === "delivery" ? "Para llevar · Envío" : order.fulfillmentType === "dine_in" ? "En local" : "Para recoger"}</span><div>{order.deliveryAddress || (order.tableNumber ? `Mesa ${order.tableNumber}` : "")}</div></td>
+                  <td className="w-36 p-2"><OrderStatusControls order={order} onUpdate={onUpdate} /></td>
+                  <td className="p-3"><DeliveryDuration order={order} currentTime={currentTime} /></td>
+                  <td className="p-3">
+                    ${order.total.toFixed(2)}<br /><span className="text-xs text-slate-500">{order.paymentStatus === "paid" ? "Pagado" : "Pendiente"}</span>
+                    {order.source === "online" && onView && <button type="button" onClick={() => onView(order)} className="mt-3 block rounded border border-action px-4 py-2 text-sm font-medium text-action">Ver orden</button>}
+                    {order.source === "local" && onEdit && !(order.status === "delivered" && order.paymentStatus === "paid") && <button type="button" onClick={() => onEdit(order)} className="mt-3 block rounded bg-action px-4 py-2 text-sm font-medium text-white">Editar orden</button>}
+                  </td>
+                </tr>
+              </Fragment>
+            ))}
+            {orders.length === 0 && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No hay pedidos.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" onClick={() => setHistoryOpen(true)} className="mt-4 min-h-12 w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-dark sm:w-auto">
+        Ver historial de hoy ({history.length})
+      </button>
+      {historyOpen && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/50 sm:items-center sm:justify-center">
+          <div role="dialog" aria-modal="true" aria-label={`Historial · ${title}`} className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-t-2xl bg-white p-4 shadow-xl sm:rounded-2xl sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold text-dark">Historial · {title}</h3>
+                <p className="text-sm text-slate-500">Pedidos entregados hoy. Se limpia al día siguiente.</p>
+              </div>
+              <button type="button" onClick={() => { setHistoryOpen(false); setHistoryOrderId(null); }} className="min-h-11 shrink-0 px-2 text-slate-500">Cerrar</button>
+            </div>
+            <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto">
+              {history.length === 0 ? (
+                <p className="rounded-lg border p-5 text-center text-sm text-slate-500">Aún no hay pedidos entregados hoy.</p>
+              ) : history.map((order) => (
+                <div key={order.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="min-w-0">
+                    <p className="break-all font-semibold text-dark">{order.orderNumber || order.id.slice(0, 8)}</p>
+                    <p className="break-words text-sm text-slate-700">{order.customerName || `${order.customer.firstName} ${order.customer.lastName}`.trim()}</p>
+                    <p className="text-xs text-slate-500">Entregado a las {new Date(order.updatedAt ?? order.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</p>
+                  </div>
+                  <button type="button" onClick={() => setHistoryOrderId(order.id)} className="min-h-11 rounded-lg border border-action px-4 py-2 text-sm font-semibold text-action">Ver orden</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {historyOrder && <OrderDetailModal order={historyOrder} onClose={() => setHistoryOrderId(null)} />}
+    </section>
+  );
 }
 
 function OrderDetailModal({ order, onClose }: { order: Order; onClose: () => void }) {
@@ -528,7 +673,65 @@ function PendingTransferQueue({ orders, onConfirm }: { orders: Order[]; onConfir
   );
 }
 
-function OrderStatusControls({ order, onUpdate }: { order: Order; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void }) { if (order.source === "local") { return <div className="flex min-w-68 flex-wrap gap-2">{order.status === "preparing" && <motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, order.fulfillmentType === "pickup" ? "ready_pickup" : order.fulfillmentType === "delivery" ? "ready_delivery" : "delivered")} className="rounded border-action bg-action px-4 py-2 text-sm font-medium text-white">En preparación</motion.button>}{order.status === "ready_pickup" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para recoger</button>}{order.status === "ready_delivery" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Lista para envío</button>}{order.status === "delivered" && order.paymentStatus === "pending" && <button type="button" onClick={() => onUpdate(order.id, "delivered", "paid")} className="rounded border bg-action px-4 py-2 text-sm font-medium text-white">Marcar pagada</button>}{order.status === "delivered" && order.paymentStatus === "paid" && <span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Entregada y pagada</span>}</div>; } if (order.status === "pending_payment" && order.paymentMethod === "transfer") { return <div className="flex min-w-68 flex-wrap gap-2"><ShineButton onClick={() => onUpdate(order.id, "accepted", "paid")}>Confirmar transferencia</ShineButton></div>; } const readyStatus: OrderStatus = order.fulfillmentType === "delivery" ? "ready_delivery" : "ready_pickup"; const steps: OrderStatus[] = ["accepted", "preparing", readyStatus, "delivered"]; const currentIndex = steps.indexOf(order.status); if (order.status === "delivered") { return <div className="flex min-w-68 flex-wrap gap-2"><span className="rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">{statusLabels.delivered}</span></div>; } const next = steps[currentIndex + 1]; if (currentIndex < 0 || !next) { return <span className="text-sm text-slate-500">{statusLabels[order.status]}</span>; } return <div className="flex min-w-68 flex-wrap gap-2"><motion.button type="button" animate={{ boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] }} transition={{ duration: 1.8, repeat: Infinity }} onClick={() => onUpdate(order.id, next, next === "delivered" && order.fulfillmentType === "pickup" ? "paid" : undefined)} className="rounded border border-action bg-action px-4 py-2 text-sm font-medium text-white">{order.status === "ready_delivery" ? "En ruta" : statusLabels[order.status]}</motion.button></div>; }
+function OrderStatusControls({ order, onUpdate }: { order: Order; onUpdate: (orderId: string, status: OrderStatus, paymentStatus?: "paid" | "pending") => void }) {
+  const controlClass = "flex w-full min-w-0 flex-wrap gap-2 md:min-w-68";
+  const buttonClass = "rounded border bg-action px-4 py-2 text-left text-sm font-medium text-white";
+  const animatedButtonProps = {
+    animate: { boxShadow: ["0 0 0 0 rgba(217,93,57,0.5)", "0 0 0 8px rgba(217,93,57,0)", "0 0 0 0 rgba(217,93,57,0)"] },
+    transition: { duration: 1.8, repeat: Infinity },
+  };
+
+  if (order.source === "local") {
+    return (
+      <div className={controlClass}>
+        {order.status === "preparing" && (
+          <motion.button
+            type="button"
+            {...animatedButtonProps}
+            onClick={() => onUpdate(order.id, order.fulfillmentType === "pickup" ? "ready_pickup" : order.fulfillmentType === "delivery" ? "ready_delivery" : "delivered")}
+            className={`${buttonClass} border-action`}
+          >
+            En preparación
+          </motion.button>
+        )}
+        {order.status === "ready_pickup" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className={buttonClass}>Lista para recoger</button>}
+        {order.status === "ready_delivery" && <button type="button" onClick={() => onUpdate(order.id, "delivered")} className={buttonClass}>Lista para envío</button>}
+        {order.status === "delivered" && order.paymentStatus === "pending" && <button type="button" onClick={() => onUpdate(order.id, "delivered", "paid")} className={buttonClass}>Marcar pagada</button>}
+        {order.status === "delivered" && order.paymentStatus === "paid" && <span className="max-w-full whitespace-normal break-words rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">Entregada y pagada</span>}
+      </div>
+    );
+  }
+
+  if (order.status === "pending_payment" && order.paymentMethod === "transfer") {
+    return <div className={controlClass}><ShineButton onClick={() => onUpdate(order.id, "accepted", "paid")}>Confirmar transferencia</ShineButton></div>;
+  }
+
+  const readyStatus: OrderStatus = order.fulfillmentType === "delivery" ? "ready_delivery" : "ready_pickup";
+  const steps: OrderStatus[] = ["accepted", "preparing", readyStatus, "delivered"];
+  const currentIndex = steps.indexOf(order.status);
+
+  if (order.status === "delivered") {
+    return <div className={controlClass}><span className="max-w-full whitespace-normal break-words rounded border border-slate-300 bg-slate-200 px-4 py-2 text-sm font-medium text-slate-700">{statusLabels.delivered}</span></div>;
+  }
+
+  const next = steps[currentIndex + 1];
+  if (currentIndex < 0 || !next) {
+    return <span className="break-words text-sm text-slate-500">{statusLabels[order.status]}</span>;
+  }
+
+  return (
+    <div className={controlClass}>
+      <motion.button
+        type="button"
+        {...animatedButtonProps}
+        onClick={() => onUpdate(order.id, next, next === "delivered" && order.fulfillmentType === "pickup" ? "paid" : undefined)}
+        className={`${buttonClass} border-action`}
+      >
+        {order.status === "ready_delivery" ? "En ruta" : statusLabels[order.status]}
+      </motion.button>
+    </div>
+  );
+}
 function DeliveryCodeModal({ order, confirming, onAskClose, onKeepOpen, onClose }: { order: Order; confirming: boolean; onAskClose: () => void; onKeepOpen: () => void; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

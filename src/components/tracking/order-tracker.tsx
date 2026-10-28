@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import OrderChat from "@/src/components/order-chat";
 import TrackingMap from "@/src/components/tracking/tracking-map";
+import { playChime } from "@/src/lib/alert-sound";
 import { currencySymbols } from "@/src/lib/currency";
 
 export type TrackedOrder = {
@@ -35,6 +36,35 @@ const labels: Record<string, string> = {
   delivered: "Entregado",
 };
 
+const ACKED_KEY = "tupedidos_ready_alert_acked";
+
+type NotificationState = NotificationPermission | "unsupported";
+
+function readAcked(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(ACKED_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function readPermission(): NotificationState {
+  return typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported";
+}
+
+async function showSystemNotification(title: string, body: string, tag: string) {
+  const options: NotificationOptions = { body, tag, requireInteraction: true, icon: "/favicon.ico" };
+  // Mobile browsers only allow notifications through a service worker registration.
+  const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.ready.catch(() => null) : null;
+  if (registration) {
+    await registration.showNotification(title, options);
+    return;
+  }
+  new Notification(title, options);
+}
+
 function progress(order: TrackedOrder) {
   const steps = order.fulfillmentType === "delivery"
     ? ["accepted", "preparing", "ready_delivery", "delivered"]
@@ -46,7 +76,59 @@ function progress(order: TrackedOrder) {
 export default function OrderTracker({ orders, onChanged }: { orders: TrackedOrder[]; onChanged: () => void }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [acked, setAcked] = useState<string[]>(readAcked);
+  const [permission, setPermission] = useState<NotificationState>(readPermission);
+  const audioRef = useRef<AudioContext | null>(null);
+  const notifiedRef = useRef<Set<string>>(new Set());
   const active = useMemo(() => orders.filter((order) => order.status !== "delivered" || order.deliveryConfirmation === "pending" || order.deliveryConfirmation === "disputed"), [orders]);
+  const pendingAlerts = useMemo(() => orders.filter((order) => order.fulfillmentType === "pickup" && order.status === "ready_pickup" && !acked.includes(order.id)), [orders, acked]);
+  const hasAlert = pendingAlerts.length > 0;
+
+  function ensureAudio() {
+    if (!audioRef.current && "AudioContext" in window) audioRef.current = new AudioContext();
+    if (audioRef.current?.state === "suspended") void audioRef.current.resume();
+    return audioRef.current;
+  }
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) void navigator.serviceWorker.register("/sw.js").catch(() => null);
+    const unlock = () => { ensureAudio(); };
+    document.addEventListener("pointerdown", unlock, { once: true });
+    return () => document.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  // The sound repeats until the customer presses "Detener alerta".
+  useEffect(() => {
+    if (!hasAlert) return;
+    const ring = () => {
+      const context = ensureAudio();
+      if (context) playChime(context);
+      if ("vibrate" in navigator) navigator.vibrate([300, 150, 300]);
+    };
+    ring();
+    const timer = window.setInterval(ring, 2000);
+    return () => window.clearInterval(timer);
+  }, [hasAlert]);
+
+  useEffect(() => {
+    if (permission !== "granted") return;
+    pendingAlerts.filter((order) => !notifiedRef.current.has(order.id)).forEach((order) => {
+      notifiedRef.current.add(order.id);
+      void showSystemNotification("¡Tu pedido está listo para recoger!", `${order.businessName} · Pedido #${order.orderNumber || order.id.slice(0, 8)}`, `ready-${order.id}`).catch(() => null);
+    });
+  }, [pendingAlerts, permission]);
+
+  function stopAlert() {
+    const next = Array.from(new Set([...acked, ...pendingAlerts.map((order) => order.id)]));
+    window.localStorage.setItem(ACKED_KEY, JSON.stringify(next));
+    setAcked(next);
+  }
+
+  async function enableNotifications() {
+    ensureAudio();
+    setPermission(await Notification.requestPermission());
+  }
+
   if (active.length === 0) return null;
 
   async function respond(orderId: string, received: boolean) {
@@ -68,6 +150,19 @@ export default function OrderTracker({ orders, onChanged }: { orders: TrackedOrd
 
   return (
     <section className="mt-6 space-y-4" aria-label="Seguimiento de pedidos">
+      {hasAlert && (
+        <div role="alert" className="flex flex-col gap-3 rounded-2xl border-2 border-action bg-action/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="font-bold text-dark">{pendingAlerts.length === 1 ? "¡Tu pedido está listo para recoger!" : `¡${pendingAlerts.length} pedidos están listos para recoger!`}</p>
+          <button type="button" onClick={stopAlert} className="min-h-12 rounded-full bg-action px-6 py-2 font-semibold text-white">Detener alerta</button>
+        </div>
+      )}
+      {permission === "default" && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-slate-700">Activa las notificaciones para avisarte con sonido y alerta del sistema cuando tu pedido esté listo.</p>
+          <button type="button" onClick={() => void enableNotifications()} className="min-h-12 shrink-0 rounded-full border border-action px-5 py-2 text-sm font-semibold text-action">Activar notificaciones</button>
+        </div>
+      )}
+      {permission === "denied" && <p className="rounded-2xl bg-slate-50 p-3 text-sm text-slate-600">Las notificaciones están bloqueadas en tu navegador. Habilítalas en los permisos del sitio para recibir avisos del sistema.</p>}
       {active.map((order) => {
         const symbol = currencySymbols[order.currency] ?? "$";
         const percent = progress(order);

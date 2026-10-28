@@ -35,14 +35,15 @@ export async function GET() {
       return NextResponse.json({ error: "Sesión no válida" }, { status: 401 });
     }
 
-    // Only today's orders (plus unfinished ones from the last 24h); history lives in the Resumen section.
+    // Today's orders, unfinished ones from the last 24h and anything delivered today (daily history that resets each day).
     const dayStart = startOfDay(toDateKey(new Date()));
     const orders = await prisma.order.findMany({
       where: {
         tenantId: user.tenantId,
         OR: [
           { createdAt: { gte: dayStart } },
-          { createdAt: { gte: new Date(dayStart.getTime() - 86_400_000) }, status: { not: "delivered" } }
+          { createdAt: { gte: new Date(dayStart.getTime() - 86_400_000) }, status: { not: "delivered" } },
+          { status: "delivered", updatedAt: { gte: dayStart } }
         ]
       },
       include: {

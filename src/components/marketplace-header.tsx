@@ -37,8 +37,8 @@ export default function MarketplaceHeader({ customerArea = false }: { customerAr
   return (
     <header className="sticky top-0 z-50 border-b bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between p-4">
-        <Link href="/" className="font-bold">
-          TuPedidos
+        <Link href="/" className="text-lg font-extrabold tracking-[0.08em] text-[#2b2118]">
+          DELIM
         </Link>
 
         <div className="flex items-center gap-4">

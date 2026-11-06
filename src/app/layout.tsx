@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import SiteFooter from "@/src/components/site-footer";
 
 import { Plus_Jakarta_Sans } from "next/font/google";
 
@@ -10,8 +11,8 @@ const jakarta =
   });
 
 export const metadata: Metadata = {
-  title: "TuPedidos",
-  description: "Marketplace gastronómico",
+  title: "DELIM",
+  description: "Pide comida de tus negocios favoritos con DELIM.",
 };
 
 export default function RootLayout({
@@ -23,10 +24,9 @@ export default function RootLayout({
   return (
     <html lang="es">
 
-      <body className={jakarta.className}>
-
-        {children}
-
+      <body className={`${jakarta.className} flex min-h-screen flex-col`}>
+        <div className="flex flex-1 flex-col">{children}</div>
+        <SiteFooter />
       </body>
 
     </html>

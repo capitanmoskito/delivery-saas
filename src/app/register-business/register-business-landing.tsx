@@ -131,8 +131,20 @@ export function RegisterBusinessLanding() {
       }
 
       if (data.success) {
-        window.alert("Negocio registrado correctamente");
-        router.push("/login");
+        const loginResponse = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: form.email, password: form.password }),
+        });
+        const loginData: { success?: boolean; message?: string } = await loginResponse.json();
+
+        if (!loginResponse.ok || !loginData.success) {
+          window.alert(loginData.message || "Tu negocio se registró, pero no pudimos iniciar sesión. Ingresa con tu correo y contraseña.");
+          router.push("/login");
+          return;
+        }
+
+        router.push("/business/dashboard");
         return;
       }
 

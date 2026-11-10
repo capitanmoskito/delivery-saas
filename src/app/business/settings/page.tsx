@@ -5,9 +5,6 @@ import {
   useState
 } from "react";
 
-import { useRouter }
-from "next/navigation";
-
 import Image
 from "next/image";
 
@@ -65,9 +62,6 @@ function createDefaultSchedules(): Schedule[] {
 }
 
 export default function SettingsPage() {
-
-  const router = useRouter();
-
   const [locked,
     setLocked] =
     useState(true);
@@ -258,6 +252,15 @@ const [passwordUnlocked,
 const [passwordError,
   setPasswordError] =
   useState("");
+
+  function finishSettingsSave(message: string) {
+    setSaveMessage(message);
+    setError("");
+    setLocked(true);
+    setShowOtp(false);
+    setOtp("");
+    setDebugOtp("");
+  }
 
   useEffect(() => {
     async function loadProfile() {
@@ -652,10 +655,6 @@ const hasProfileChanges =
         schedules
       });
 
-      setSaveMessage(
-        "Cambios guardados correctamente"
-      );
-
       setLastModification(
         data.lastModification ||
           null
@@ -670,7 +669,7 @@ const hasProfileChanges =
         setHistory(historyData.rows || []);
       }
 
-      router.refresh();
+      finishSettingsSave("Cambios guardados correctamente");
 
     } catch (error) {
 
@@ -882,7 +881,7 @@ const hasProfileChanges =
 
 <div className="space-y-8">
 
-  <section className="rounded-3xl border p-8">
+  <section id="branding" className="rounded-3xl border p-8">
 
     <h2 className="mb-6 text-2xl font-bold">
       Branding
@@ -1266,7 +1265,7 @@ const hasProfileChanges =
 
   </section>
   
-  <section className="rounded-3xl border p-8">
+  <section id="general" className="rounded-3xl border p-8">
 
     <h2 className="mb-6 text-2xl font-bold">
 
@@ -1399,7 +1398,7 @@ const hasProfileChanges =
 
   
 
-  <section className="rounded-3xl border p-8">
+  <section id="address" className="rounded-3xl border p-8">
 
     <h2 className="mb-6 text-2xl font-bold">
 
@@ -1438,7 +1437,7 @@ const hasProfileChanges =
 
   </section>
   
-  <section className="rounded-3xl border p-8">
+  <section id="service-hours" className="rounded-3xl border p-8">
 
   <h2 className="mb-6 text-2xl font-bold">
 
@@ -1635,15 +1634,13 @@ const hasProfileChanges =
 
   <PaymentMethodsSettings
     onSaved={() => {
-      setSaveMessage("Métodos de pago guardados correctamente");
-      setLocked(true);
+      finishSettingsSave("Métodos de pago guardados correctamente");
     }}
   />
 
   <DeliverySettings
     onSaved={() => {
-      setSaveMessage("Configuración de envíos guardada correctamente");
-      setLocked(true);
+      finishSettingsSave("Configuración de envíos guardada correctamente");
     }}
   />
 

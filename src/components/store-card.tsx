@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Store } from "lucide-react";
+import { ArrowRight, MapPin, Store } from "lucide-react";
 
 interface Props {
   id: string;
@@ -9,6 +9,7 @@ interface Props {
   imageUrl?: string | null;
   logoUrl?: string | null;
   categoryName?: string;
+  distanceMeters?: number;
 }
 
 export default function StoreCard({
@@ -18,7 +19,15 @@ export default function StoreCard({
   imageUrl,
   logoUrl,
   categoryName,
+  distanceMeters,
 }: Props) {
+  const distanceLabel =
+    distanceMeters === undefined
+      ? null
+      : distanceMeters < 1000
+        ? `${Math.round(distanceMeters)} m`
+        : `${new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 }).format(distanceMeters / 1000)} km`;
+
   return (
     <Link
       href={`/store/${id}`}
@@ -43,6 +52,15 @@ export default function StoreCard({
           {logoUrl && (
             <span className="absolute bottom-3 left-3 h-12 w-12 overflow-hidden rounded-lg border-2 border-white bg-white shadow-md">
               <Image src={logoUrl} alt="" fill unoptimized className="object-cover" />
+            </span>
+          )}
+          {distanceLabel && (
+            <span
+              aria-label={`A ${distanceLabel} de tu ubicación`}
+              className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1.5 text-xs font-bold text-[#2b2118] shadow-sm"
+            >
+              <MapPin size={13} className="text-[#d95d39]" aria-hidden="true" />
+              {distanceLabel}
             </span>
           )}
         </div>

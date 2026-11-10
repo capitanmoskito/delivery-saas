@@ -3,12 +3,14 @@ from "next/link";
 
 import BusinessMenu
 from "@/src/components/business-menu";
+import BusinessOnboardingBanner from "@/src/components/business-onboarding-banner";
 
 import { getCurrentUser }
 from "@/src/lib/current-user";
 
 import { prisma }
 from "@/src/lib/prisma";
+import { getTenantOnboardingProgress } from "@/src/modules/tenants/tenant-onboarding";
 
 export default async function BusinessLayout({
   children,
@@ -17,16 +19,32 @@ export default async function BusinessLayout({
 }) {
   const user = await getCurrentUser();
 
-  const tenant = user?.tenantId
-    ? await prisma.tenant.findUnique({
-        where: {
-          id: user.tenantId
-        },
-        select: {
-          businessName: true
-        }
-      })
-    : null;
+  const [tenant, onboardingProgress] = user?.tenantId
+    ? await Promise.all([
+        prisma.tenant.findUnique({
+          where: { id: user.tenantId },
+          select: { businessName: true, status: true, trialEndsAt: true },
+        }),
+        getTenantOnboardingProgress(user.tenantId),
+      ])
+    : [null, null];
+
+  let tenantStatus = tenant?.status ?? "";
+  const now = new Date();
+  if (
+    tenant &&
+    onboardingProgress &&
+    !onboardingProgress.complete &&
+    tenant.status === "trial" &&
+    tenant.trialEndsAt &&
+    tenant.trialEndsAt <= now
+  ) {
+    const suspended = await prisma.tenant.updateMany({
+      where: { id: user?.tenantId, status: "trial", trialEndsAt: { lte: now } },
+      data: { status: "suspended" },
+    });
+    if (suspended.count > 0) tenantStatus = "suspended";
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -46,6 +64,14 @@ export default async function BusinessLayout({
         </div>
 
       </header>
+
+      {onboardingProgress && !onboardingProgress.complete && (
+        <BusinessOnboardingBanner
+          progress={onboardingProgress}
+          trialEndsAt={tenant?.trialEndsAt ?? null}
+          tenantStatus={tenantStatus}
+        />
+      )}
 
       <main className="mx-auto max-w-7xl p-6">
         {children}

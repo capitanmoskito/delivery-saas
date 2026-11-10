@@ -2,13 +2,23 @@ import { prisma } from "@/src/lib/prisma";
 import Image from "next/image";
 import MarketplaceHeader from "@/src/components/marketplace-header";
 import MarketplaceCategories from "@/src/components/marketplace-categories";
+import { getTenantOnboardingProgressForTenants } from "@/src/modules/tenants/tenant-onboarding";
 
 export default async function HomePage() {
-  const restaurants = await prisma.restaurant.findMany({
-    where: { active: true },
+  const restaurantsWithTenant = await prisma.restaurant.findMany({
+    where: {
+      active: true,
+      tenant: { status: { in: ["trial", "pending_payment", "active"] } },
+    },
     select: { id: true, tenantId: true, name: true },
   });
 
+  const onboardingByTenant = await getTenantOnboardingProgressForTenants(
+    restaurantsWithTenant.map((restaurant) => restaurant.tenantId),
+  );
+  const restaurants = restaurantsWithTenant.filter(
+    (restaurant) => onboardingByTenant.get(restaurant.tenantId)?.complete,
+  );
   const tenantIds = [...new Set(restaurants.map((restaurant) => restaurant.tenantId))];
   const [profiles, categories] = await Promise.all([
     prisma.businessProfile.findMany({
@@ -19,6 +29,8 @@ export default async function HomePage() {
         description: true,
         bannerUrl: true,
         logoUrl: true,
+        latitude: true,
+        longitude: true,
       },
     }),
     prisma.category.findMany({
@@ -53,6 +65,8 @@ export default async function HomePage() {
           description: profile?.description,
           imageUrl: profile?.bannerUrl || undefined,
           logoUrl: profile?.logoUrl || undefined,
+          latitude: profile?.latitude ?? null,
+          longitude: profile?.longitude ?? null,
         };
       });
 

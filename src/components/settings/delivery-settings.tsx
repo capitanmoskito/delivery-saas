@@ -57,7 +57,7 @@ export default function DeliverySettings({ onSaved }: { onSaved: () => void }) {
   }
 
   return (
-    <section className="rounded-3xl border p-8">
+    <section id="fulfillment" className="rounded-3xl border p-8">
       <h2 className="mb-2 text-2xl font-bold">Envíos y recolección</h2>
       <p className="mb-6 text-sm text-slate-600">Define cómo reciben sus pedidos tus clientes. El costo por kilómetro se calcula en el checkout con la distancia entre tu negocio y la ubicación del cliente.</p>
       {loading ? (

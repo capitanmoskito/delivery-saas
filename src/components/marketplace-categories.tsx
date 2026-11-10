@@ -1,7 +1,8 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Utensils } from "lucide-react";
+import { LoaderCircle, MapPin, Utensils } from "lucide-react";
 import StoreCard from "@/src/components/store-card";
 
 type Store = {
@@ -10,6 +11,8 @@ type Store = {
   description?: string | null;
   imageUrl?: string;
   logoUrl?: string;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 type CategoryGroup = {
@@ -18,8 +21,83 @@ type CategoryGroup = {
   stores: Store[];
 };
 
+type Coordinates = {
+  latitude: number;
+  longitude: number;
+};
+
+type LocationStatus = "loading" | "available" | "denied" | "unavailable";
+
+function distanceInMeters(origin: Coordinates, destination: Pick<Store, "latitude" | "longitude">) {
+  if (
+    destination.latitude === null ||
+    destination.longitude === null ||
+    !Number.isFinite(destination.latitude) ||
+    !Number.isFinite(destination.longitude) ||
+    Math.abs(destination.latitude) > 90 ||
+    Math.abs(destination.longitude) > 180
+  ) {
+    return null;
+  }
+
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = toRadians(destination.latitude - origin.latitude);
+  const longitudeDelta = toRadians(destination.longitude - origin.longitude);
+  const haversine =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(toRadians(origin.latitude)) *
+      Math.cos(toRadians(destination.latitude)) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return 6_371_000 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
+
 export default function MarketplaceCategories({ groups }: { groups: CategoryGroup[] }) {
   const reduceMotion = useReducedMotion();
+  const [location, setLocation] = useState<Coordinates | null>(null);
+  const [locationStatus, setLocationStatus] = useState<LocationStatus>("loading");
+
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationStatus("unavailable");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setLocation({ latitude: coords.latitude, longitude: coords.longitude });
+        setLocationStatus("available");
+      },
+      (error) => {
+        setLocation(null);
+        setLocationStatus(error.code === error.PERMISSION_DENIED ? "denied" : "unavailable");
+      },
+      { enableHighAccuracy: false, maximumAge: 60_000, timeout: 10_000 },
+    );
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(requestLocation, 0);
+    return () => window.clearTimeout(timer);
+  }, [requestLocation]);
+
+  const orderedGroups = useMemo(
+    () =>
+      location
+        ? groups.map((group) => ({
+            ...group,
+            stores: [...group.stores].sort((left, right) => {
+              const leftDistance = distanceInMeters(location, left);
+              const rightDistance = distanceInMeters(location, right);
+
+              if (leftDistance === null) return rightDistance === null ? 0 : 1;
+              if (rightDistance === null) return -1;
+              return leftDistance - rightDistance;
+            }),
+          }))
+        : groups,
+    [groups, location],
+  );
 
   if (groups.length === 0) {
     return (
@@ -56,7 +134,45 @@ export default function MarketplaceCategories({ groups }: { groups: CategoryGrou
       </div>
 
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
-        {groups.map((group) => (
+        <div
+          className="flex min-h-12 items-center gap-2 py-4 text-sm text-stone-600"
+          aria-live="polite"
+          role="status"
+        >
+          {locationStatus === "loading" && (
+            <>
+              <LoaderCircle size={17} className="animate-spin text-[#d95d39]" aria-hidden="true" />
+              <span>Buscando negocios cerca de ti...</span>
+            </>
+          )}
+          {locationStatus === "available" && (
+            <>
+              <MapPin size={17} className="text-[#d95d39]" aria-hidden="true" />
+              <span>Negocios ordenados del más cercano al más lejano</span>
+            </>
+          )}
+          {(locationStatus === "denied" || locationStatus === "unavailable") && (
+            <>
+              <MapPin size={17} className="text-stone-400" aria-hidden="true" />
+              <span>
+                {locationStatus === "denied"
+                  ? "Permite el acceso a tu ubicación para ordenar los negocios cercanos."
+                  : "No pudimos determinar tu ubicación."}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setLocationStatus("loading");
+                  requestLocation();
+                }}
+                className="ml-auto shrink-0 font-semibold text-[#a94327] underline-offset-4 hover:underline"
+              >
+                Intentar de nuevo
+              </button>
+            </>
+          )}
+        </div>
+        {orderedGroups.map((group) => (
           <section key={group.id} id={group.id} className="scroll-mt-36 pt-12 sm:pt-16">
             <div className="mb-6 flex items-end justify-between gap-4">
               <div>
@@ -84,6 +200,7 @@ export default function MarketplaceCategories({ groups }: { groups: CategoryGrou
                     description={store.description}
                     imageUrl={store.imageUrl}
                     logoUrl={store.logoUrl}
+                    distanceMeters={location ? distanceInMeters(location, store) ?? undefined : undefined}
                     categoryName={group.name}
                   />
                 </motion.div>

@@ -89,7 +89,7 @@ export default function PaymentMethodsSettings({ onSaved }: { onSaved: () => voi
   }
 
   return (
-    <section className="rounded-3xl border p-8">
+    <section id="payment-methods" className="rounded-3xl border p-8">
       <h2 className="mb-2 text-2xl font-bold">Métodos de pago</h2>
       <p className="mb-6 text-sm text-slate-600">Las credenciales se cifran y solo se usan desde el servidor. Al dejar un campo secreto vacío se conserva el valor guardado. Para activar tarjetas, configura en el servidor la clave de cifrado y la URL HTTPS pública indicada en el README.</p>
       {loading ? (

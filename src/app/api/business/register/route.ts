@@ -170,6 +170,15 @@ const sequence =
         }
       });
 
+    await prisma.businessProfile.create({
+      data: {
+        tenantId: tenant.id,
+        restaurantId: restaurant.id,
+        businessName: body.businessName,
+        adminEmail: body.email,
+      },
+    });
+
     await prisma.referralCode.create({
 
       data: {
